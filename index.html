@@ -46,15 +46,6 @@ body {
     radial-gradient(900px 500px at 100% 0%, rgba(129, 140, 248, 0.10), transparent 55%),
     var(--bg);
 }
-body::before {
-  content: "";
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--accent-grad);
-  z-index: 80;
-}
-
 h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
 
 /* -------- Login -------- */
@@ -65,104 +56,37 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-  background-size: 34px 34px;
-  background-position: center;
 }
 
-.login-shell {
-  display: flex;
+.login-card {
   width: 100%;
-  max-width: 840px;
-  min-height: 480px;
-  border-radius: 20px;
-  overflow: hidden;
+  max-width: 360px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  box-shadow: 0 40px 80px -30px rgba(0,0,0,0.6);
-}
-
-.login-side {
-  flex: 1 1 44%;
-  background:
-    radial-gradient(500px 260px at 20% 0%, rgba(255,255,255,0.14), transparent 60%),
-    var(--accent-grad);
-  color: #04141a;
-  padding: 42px 36px;
-  display: flex;
-  flex-direction: column;
-}
-
-.login-side .brand-mark {
-  background: rgba(4, 20, 26, 0.14);
-  box-shadow: none;
-}
-.login-side .brand-mark svg path { stroke: #04141a; }
-.login-side .brand-mark svg rect { fill: transparent; }
-
-.login-side h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 20px 0 6px;
-}
-.login-side .side-sub {
-  font-size: 0.88rem;
-  margin: 0 0 30px;
-  color: rgba(4, 20, 26, 0.75);
-  font-weight: 500;
-}
-
-.side-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
-.side-features li {
-  font-size: 0.85rem;
-  font-weight: 600;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  color: rgba(4, 20, 26, 0.88);
-}
-.side-features li svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 1px; }
-
-.login-side .side-foot {
-  margin-top: auto;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(4, 20, 26, 0.6);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.login-form-side {
-  flex: 1 1 56%;
-  background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
-  padding: 42px 40px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  background: var(--card);
+  padding: 36px 32px;
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--accent-grad);
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 20px -6px rgba(34, 211, 238, 0.45);
 }
 .brand-mark.small { width: 30px; height: 30px; border-radius: 8px; }
 
-.login-form-side h2 {
-  font-size: 1.25rem;
+.login-card h2 {
+  font-size: 1.15rem;
   font-weight: 700;
-  margin: 0 0 4px;
+  margin: 16px 0 4px;
 }
-.login-form-side p.sub {
+.login-card p.sub {
   color: var(--text-dim);
-  font-size: 0.86rem;
-  margin: 0 0 10px;
+  font-size: 0.85rem;
+  margin: 0 0 6px;
 }
 
 label {
@@ -207,11 +131,10 @@ button {
 button:active { transform: translateY(1px); }
 
 .btn-primary {
-  background: var(--accent-grad);
+  background: var(--accent);
   color: #04141a;
   width: 100%;
   margin-top: 22px;
-  box-shadow: 0 10px 24px -10px rgba(34, 211, 238, 0.5);
 }
 .btn-primary:hover { filter: brightness(1.08); }
 
@@ -259,10 +182,10 @@ button:active { transform: translateY(1px); }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(34, 211, 238, 0.12);
-  color: var(--accent);
-  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 6px;
+  background: var(--bg-soft);
+  color: var(--text-dim);
+  border: 1px solid var(--border-soft);
   margin-bottom: 26px;
 }
 
@@ -283,7 +206,7 @@ button:active { transform: translateY(1px); }
 .nav-icon { width: 18px; height: 18px; flex-shrink: 0; color: inherit; }
 .nav-btn:hover { background: var(--card); color: var(--text); }
 .nav-btn.active {
-  background: linear-gradient(90deg, rgba(34, 211, 238, 0.14), rgba(129, 140, 248, 0.05));
+  background: var(--card);
   color: var(--accent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
@@ -337,10 +260,7 @@ button:active { transform: translateY(1px); }
   font-family: var(--font-display);
   font-size: 1.7rem;
   font-weight: 700;
-  background: var(--accent-grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 .toolbar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
@@ -432,44 +352,23 @@ tbody tr:last-child td { border-bottom: none; }
 
 <!-- ======================= LOGIN ======================= -->
 <div class="login-wrap" id="loginWrap">
-  <div class="login-shell">
-
-    <div class="login-side">
-      <div class="brand-mark">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 9h10M7 12h10M7 15h6" stroke="#04141a" stroke-width="2" stroke-linecap="round"/></svg>
-      </div>
-      <h1>Helpdesk TI</h1>
-      <p class="side-sub">Panel de control de Soporte TI para tus clientes.</p>
-      <ul class="side-features">
-        <li><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#04141a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Inventario de equipos por empresa</li>
-        <li><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#04141a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Contraseñas administrativas protegidas</li>
-        <li><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#04141a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Exporta todo a Excel en un clic</li>
-      </ul>
-      <div class="side-foot">Soporte TI</div>
+  <div class="login-card">
+    <div class="brand-mark small">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 9h10M7 12h10M7 15h6" stroke="#04141a" stroke-width="2" stroke-linecap="round"/></svg>
     </div>
+    <h2>Helpdesk TI</h2>
+    <p class="sub">Ingresa con la cuenta que te creó tu administrador.</p>
 
-    <div class="login-form-side">
-      <h2>Iniciar sesión</h2>
-      <p class="sub">Ingresa con la cuenta que te creó tu administrador.</p>
+    <form id="loginForm">
+      <label for="loginEmail">Usuario</label>
+      <input type="text" id="loginEmail" required autocomplete="username" placeholder="santiago.agudelo" />
 
-      <form id="loginForm">
-        <label for="loginEmail">Usuario</label>
-        <input type="text" id="loginEmail" required autocomplete="username" placeholder="santiago.agudelo" />
+      <label for="loginPassword">Contraseña</label>
+      <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••" />
 
-        <label for="loginPassword">Contraseña</label>
-        <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••" />
-
-        <button type="submit" class="btn-primary" id="loginBtn">Iniciar sesión</button>
-        <div class="error-msg" id="loginError"></div>
-      </form>
-
-      <p class="hint">
-        ¿No tienes cuenta? Pídele al administrador que te cree una desde el
-        panel de Supabase (Authentication → Users). Este sistema no tiene
-        registro público.
-      </p>
-    </div>
-
+      <button type="submit" class="btn-primary" id="loginBtn">Iniciar sesión</button>
+      <div class="error-msg" id="loginError"></div>
+    </form>
   </div>
 </div>
 
@@ -496,6 +395,10 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="nav-btn" data-view="credenciales" id="navCredenciales">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg>
         <span>Contraseñas</span>
+      </button>
+      <button class="nav-btn" data-view="equipo" id="navEquipo" style="display:none;">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="17.5" cy="8.5" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M15.8 14.3c2.6.3 4.7 2.2 4.7 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Equipo</span>
       </button>
     </nav>
 
@@ -672,6 +575,46 @@ tbody tr:last-child td { border-bottom: none; }
           </table>
         </div>
         <div class="empty-state" id="credencialesEmpty" style="display:none;">Sin credenciales para esta empresa todavía.</div>
+      </div>
+    </section>
+
+    <!-- ---------- Vista: Equipo (solo admin) ---------- -->
+    <section class="view" id="view-equipo">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="17.5" cy="8.5" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M15.8 14.3c2.6.3 4.7 2.2 4.7 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div>
+          <h1>Equipo</h1>
+          <p class="sub">Crea cuentas para tus colaboradores sin salir de la app.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Crear usuario nuevo</h3>
+        <div class="form-grid">
+          <div><label for="nuevoUsuario">Usuario</label><input id="nuevoUsuario" placeholder="Ej: maria.perez" /></div>
+          <div><label for="nuevoNombre">Nombre</label><input id="nuevoNombre" placeholder="Ej: María Pérez" /></div>
+          <div><label for="nuevoPassword">Contraseña</label><input id="nuevoPassword" type="text" placeholder="Mínimo 6 caracteres" /></div>
+          <div>
+            <label for="nuevoRol">Rol</label>
+            <select id="nuevoRol">
+              <option value="tecnico">Técnico</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnCrearUsuario">Crear usuario</button>
+        <div class="error-msg" id="usuarioError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Usuarios del equipo</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nombre</th><th>Rol</th></tr></thead>
+            <tbody id="tablaUsuarios"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="usuariosEmpty" style="display:none;">Todavía no hay otros usuarios.</div>
       </div>
     </section>
 

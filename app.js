@@ -61,8 +61,11 @@ async function entrarApp(session) {
   $("personalTitulo").textContent = nombrePersonal + " PERSONAL";
   $("personalNombre").value = perfil.nombre || "";
 
+  $("navEquipo").style.display = perfil.rol === "admin" ? "flex" : "none";
+
   await cargarEmpresas();
   await cargarPersonal();
+  if (perfil.rol === "admin") await cargarUsuarios();
 }
 
 function usuarioAEmail(valor) {
@@ -387,6 +390,63 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
   }));
   exportarExcel(filas, `Credenciales - ${nombreEmpresa}.xlsx`, "Credenciales");
 });
+
+// ------------------------------------------------------------
+// Equipo (solo admin): crear colaboradores sin salir de la app.
+// Llama a la Edge Function "crear-usuario", que corre en el
+// servidor de Supabase con la llave secreta — esa llave nunca
+// llega al navegador.
+// ------------------------------------------------------------
+
+$("btnCrearUsuario").addEventListener("click", async () => {
+  $("usuarioError").textContent = "";
+  const usuario = $("nuevoUsuario").value.trim();
+  const nombre = $("nuevoNombre").value.trim() || usuario;
+  const password = $("nuevoPassword").value.trim();
+  const rol = $("nuevoRol").value;
+
+  if (!usuario) { $("usuarioError").textContent = "Escribe un usuario."; return; }
+  if (password.length < 6) { $("usuarioError").textContent = "La contraseña debe tener al menos 6 caracteres."; return; }
+
+  $("btnCrearUsuario").disabled = true;
+  const { data, error } = await sb.functions.invoke("crear-usuario", {
+    body: { usuario, nombre, password, rol, dominio: USUARIO_DOMINIO },
+  });
+  $("btnCrearUsuario").disabled = false;
+
+  if (error || data?.error) {
+    $("usuarioError").textContent = "Error: " + (data?.error || error.message);
+    return;
+  }
+
+  $("nuevoUsuario").value = ""; $("nuevoNombre").value = ""; $("nuevoPassword").value = "";
+  $("nuevoRol").value = "tecnico";
+  toast("Usuario creado: " + data.email);
+  await cargarUsuarios();
+});
+
+async function cargarUsuarios() {
+  const tbody = $("tablaUsuarios");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const { data, error } = await sb
+    .from("usuarios_perfil")
+    .select("id, nombre, rol")
+    .order("nombre");
+
+  if (error) { toast("Error al cargar usuarios: " + error.message, true); return; }
+
+  $("usuariosEmpty").style.display = (data && data.length) ? "none" : "block";
+
+  (data || []).forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.nombre)}</td>
+      <td><span class="pill">${r.rol === "admin" ? "Administrador" : "Técnico"}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
 
 // ------------------------------------------------------------
 // Personal (privado por usuario — nadie más lo ve, ni el admin)
