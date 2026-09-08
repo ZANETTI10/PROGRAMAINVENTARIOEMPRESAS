@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Helpdesk TI — Soporte TI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230b1120'/%3E%3Cpath d='M7 9h10M7 12h10M7 15h6' stroke='%2322d3ee' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   Helpdesk TI — estilos (inline a propósito: así la página se ve
+   bien incluso si se abre este archivo solo, sin los demás).
+   ============================================================ */
+:root {
+  --bg: #060a14;
+  --bg-2: #0b1120;
+  --bg-soft: #101a30;
+  --card: #121d36;
+  --border: #223050;
+  --border-soft: #1a2540;
+  --text: #eef1fb;
+  --text-dim: #8a97b8;
+  --text-faint: #5c6989;
+  --accent: #22d3ee;
+  --accent-2: #818cf8;
+  --accent-grad: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+  --danger: #fb7185;
+  --radius: 14px;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--text);
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 600px at 12% -10%, rgba(34, 211, 238, 0.10), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(129, 140, 248, 0.10), transparent 55%),
+    var(--bg);
+}
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--accent-grad);
+  z-index: 80;
+}
+
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+
+/* -------- Login -------- */
+
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 34px 34px;
+  background-position: center;
+}
+
+.login-shell {
+  display: flex;
+  width: 100%;
+  max-width: 840px;
+  min-height: 480px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 40px 80px -30px rgba(0,0,0,0.6);
+}
+
+.login-side {
+  flex: 1 1 44%;
+  background:
+    radial-gradient(500px 260px at 20% 0%, rgba(255,255,255,0.14), transparent 60%),
+    var(--accent-grad);
+  color: #04141a;
+  padding: 42px 36px;
+  display: flex;
+  flex-direction: column;
+}
+
+.login-side .brand-mark {
+  background: rgba(4, 20, 26, 0.14);
+  box-shadow: none;
+}
+.login-side .brand-mark svg path { stroke: #04141a; }
+.login-side .brand-mark svg rect { fill: transparent; }
+
+.login-side h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 20px 0 6px;
+}
+.login-side .side-sub {
+  font-size: 0.88rem;
+  margin: 0 0 30px;
+  color: rgba(4, 20, 26, 0.75);
+  font-weight: 500;
+}
+
+.side-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+.side-features li {
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: rgba(4, 20, 26, 0.88);
+}
+.side-features li svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 1px; }
+
+.login-side .side-foot {
+  margin-top: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(4, 20, 26, 0.6);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.login-form-side {
+  flex: 1 1 56%;
+  background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
+  padding: 42px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--accent-grad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px -6px rgba(34, 211, 238, 0.45);
+}
+.brand-mark.small { width: 30px; height: 30px; border-radius: 8px; }
+
+.login-form-side h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.login-form-side p.sub {
+  color: var(--text-dim);
+  font-size: 0.86rem;
+  margin: 0 0 10px;
+}
+
+label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin-bottom: 7px;
+  margin-top: 16px;
+}
+
+input, select, textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  padding: 11px 13px;
+  font-size: 0.92rem;
+  font-family: var(--font-body);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  padding: 11px 18px;
+  transition: transform 0.06s ease, filter 0.15s, background 0.15s, border-color 0.15s, color 0.15s;
+}
+button:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: var(--accent-grad);
+  color: #04141a;
+  width: 100%;
+  margin-top: 22px;
+  box-shadow: 0 10px 24px -10px rgba(34, 211, 238, 0.5);
+}
+.btn-primary:hover { filter: brightness(1.08); }
+
+.btn-secondary {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+.error-msg { color: var(--danger); font-size: 0.82rem; margin-top: 12px; min-height: 1em; }
+
+.hint {
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  margin-top: 20px;
+  line-height: 1.5;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 16px;
+}
+
+/* -------- App shell -------- */
+
+.app-shell { display: none; min-height: 100vh; }
+.app-shell.visible { display: flex; }
+
+.sidebar {
+  width: 232px;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border-soft);
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.sidebar h2 { font-size: 1.02rem; font-weight: 700; margin: 0; }
+.sidebar .rol-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  margin-bottom: 26px;
+}
+
+.nav-group { display: flex; flex-direction: column; gap: 3px; }
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 0.87rem;
+  width: 100%;
+}
+.nav-icon { width: 18px; height: 18px; flex-shrink: 0; color: inherit; }
+.nav-btn:hover { background: var(--card); color: var(--text); }
+.nav-btn.active {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.14), rgba(129, 140, 248, 0.05));
+  color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.user-email { font-size: 0.74rem; color: var(--text-faint); margin-bottom: 10px; word-break: break-all; }
+
+.main { flex: 1; padding: 32px 38px; overflow-y: auto; }
+
+.view-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
+.view-icon {
+  width: 42px; height: 42px;
+  border-radius: 11px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.view-icon svg { width: 21px; height: 21px; }
+
+.main h1 { font-size: 1.35rem; font-weight: 700; margin: 0 0 4px; }
+.main .sub { color: var(--text-dim); font-size: 0.85rem; margin: 0; }
+
+.view { display: none; }
+.view.active { display: block; }
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 700;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.toolbar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
+.toolbar .field { min-width: 230px; }
+.toolbar label { margin-top: 0; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-bottom: 20px;
+}
+.card h3 { margin: 0 0 16px; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.card h3::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--accent-grad); }
+
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 15px 16px; }
+.form-grid .full { grid-column: 1 / -1; }
+
+.table-wrap { overflow-x: auto; border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+th {
+  color: var(--text-faint);
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255,255,255,0.015);
+}
+td { color: var(--text); }
+tbody tr:hover td { background: rgba(255,255,255,0.025); }
+tbody tr:last-child td { border-bottom: none; }
+
+.pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(129, 140, 248, 0.14);
+  color: #b4bbf7;
+  border: 1px solid rgba(129, 140, 248, 0.25);
+}
+
+.empty-state { color: var(--text-faint); font-size: 0.85rem; padding: 34px 0; text-align: center; }
+
+.pw-cell { font-family: var(--font-mono); font-size: 0.8rem; }
+.reveal-btn {
+  background: transparent; border: none; color: var(--accent);
+  padding: 2px 6px; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+.actions-cell { display: flex; gap: 6px; }
+.icon-btn {
+  background: transparent; color: var(--text-faint);
+  padding: 5px 10px; border-radius: 7px; font-size: 0.76rem; font-weight: 600;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.icon-btn.danger:hover { color: var(--danger); background: rgba(251, 113, 133, 0.1); }
+
+.toast {
+  position: fixed; bottom: 22px; right: 22px;
+  background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  padding: 13px 20px; border-radius: 10px; font-size: 0.85rem; max-width: 320px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+  display: none;
+}
+.toast.error { border-left-color: var(--danger); }
+.toast.visible { display: block; }
+
+@media (max-width: 780px) {
+  .app-shell.visible { flex-direction: column; }
+  .sidebar { width: 100%; flex-direction: row; align-items: center; overflow-x: auto; padding: 14px 16px; gap: 14px; }
+  .brand-row { margin-bottom: 0; }
+  .sidebar .rol-badge, .sidebar-footer { display: none; }
+  .nav-group { flex-direction: row; }
+  .nav-btn { white-space: nowrap; }
+  .main { padding: 20px; }
+}
+@media (max-width: 720px) {
+  .login-shell { flex-direction: column; max-width: 420px; }
+  .login-side { padding: 32px 30px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= LOGIN ======================= -->
+<div class="login-wrap" id="loginWrap">
+  <div class="login-shell">
+
+    <div class="login-side">
+      <div class="brand-mark">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 9h10M7 12h10M7 15h6" stroke="#04141a" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <h1>Helpdesk TI</h1>
+      <p class="side-sub">Panel de control de Soporte TI para tus clientes.</p>
+      <ul class="side-features">
+        <li><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#04141a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Inventario de equipos por empresa</li>
+        <li><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#04141a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Contraseñas administrativas protegidas</li>
+        <li><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#04141a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Exporta todo a Excel en un clic</li>
+      </ul>
+      <div class="side-foot">Soporte TI</div>
+    </div>
+
+    <div class="login-form-side">
+      <h2>Iniciar sesión</h2>
+      <p class="sub">Ingresa con la cuenta que te creó tu administrador.</p>
+
+      <form id="loginForm">
+        <label for="loginEmail">Usuario</label>
+        <input type="text" id="loginEmail" required autocomplete="username" placeholder="santiago.agudelo" />
+
+        <label for="loginPassword">Contraseña</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••" />
+
+        <button type="submit" class="btn-primary" id="loginBtn">Iniciar sesión</button>
+        <div class="error-msg" id="loginError"></div>
+      </form>
+
+      <p class="hint">
+        ¿No tienes cuenta? Pídele al administrador que te cree una desde el
+        panel de Supabase (Authentication → Users). Este sistema no tiene
+        registro público.
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ======================= APP ======================= -->
+<div class="app-shell" id="appShell">
+  <aside class="sidebar">
+    <div class="brand-row">
+      <div class="brand-mark small">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 9h10M7 12h10M7 15h6" stroke="#04141a" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <h2>Helpdesk TI</h2>
+    </div>
+    <span class="rol-badge" id="rolBadge">técnico</span>
+
+    <nav class="nav-group">
+      <button class="nav-btn active" data-view="empresas">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 21V7l8-4 8 4v14M9 21v-6h6v6M4 21h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Empresas</span>
+      </button>
+      <button class="nav-btn" data-view="inventario">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Inventario</span>
+      </button>
+      <button class="nav-btn" data-view="credenciales" id="navCredenciales">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span>Contraseñas</span>
+      </button>
+    </nav>
+
+    <div class="nav-group" style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border-soft);">
+      <button class="nav-btn" data-view="personal" id="navPersonal">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span id="navPersonalLabel">Personal</span>
+      </button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-email" id="userEmail"></div>
+      <button class="btn-secondary" id="logoutBtn" style="width:100%;">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ---------- Vista: Empresas ---------- -->
+    <section class="view active" id="view-empresas">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 21V7l8-4 8 4v14M9 21v-6h6v6M4 21h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div>
+          <h1>Empresas</h1>
+          <p class="sub">Clientes que administras. Agregar uno nuevo lo habilita en Inventario y Contraseñas.</p>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <span class="stat-label">Empresas</span>
+          <span class="stat-value" id="statEmpresas">0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Equipos totales</span>
+          <span class="stat-value" id="statEquipos">0</span>
+        </div>
+        <div class="stat-card" id="statCredencialesCard">
+          <span class="stat-label">Credenciales</span>
+          <span class="stat-value" id="statCredenciales">0</span>
+        </div>
+      </div>
+
+      <div class="card" id="empresaFormCard" style="display:none;">
+        <h3>Nueva empresa</h3>
+        <div class="toolbar">
+          <div class="field">
+            <label for="nuevaEmpresaNombre">Nombre</label>
+            <input type="text" id="nuevaEmpresaNombre" placeholder="Ej: Finca San Cayetano" />
+          </div>
+          <button class="btn-primary" style="margin-top:0; width:auto;" id="btnCrearEmpresa">Agregar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Listado</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empresa</th><th>Equipos</th><th>Credenciales</th><th></th></tr></thead>
+            <tbody id="tablaEmpresas"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="empresasEmpty" style="display:none;">Todavía no hay empresas registradas.</div>
+      </div>
+    </section>
+
+    <!-- ---------- Vista: Inventario ---------- -->
+    <section class="view" id="view-inventario">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div>
+          <h1>Inventario de equipos</h1>
+          <p class="sub">Selecciona una empresa para ver y registrar sus equipos.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="invEmpresaSelect">Empresa</label>
+          <select id="invEmpresaSelect"></select>
+        </div>
+        <button class="btn-secondary" id="btnExportarInventario">Exportar a Excel</button>
+      </div>
+
+      <div class="card">
+        <h3>Registrar equipo</h3>
+        <div class="form-grid">
+          <div>
+            <label for="eqTipo">Tipo de equipo</label>
+            <select id="eqTipo">
+              <option value="">Selecciona…</option>
+              <option>Computador de escritorio</option>
+              <option>Portátil</option>
+              <option>Servidor</option>
+              <option>Impresora</option>
+              <option>Router</option>
+              <option>Switch</option>
+              <option>Cámara IP</option>
+              <option>Access Point</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div><label for="eqNombreRed">Nombre de red</label><input id="eqNombreRed" /></div>
+          <div><label for="eqSitio">Sitio / Ubicación</label><input id="eqSitio" /></div>
+          <div><label for="eqResponsable">Responsable</label><input id="eqResponsable" /></div>
+          <div><label for="eqReferencia">Referencia</label><input id="eqReferencia" /></div>
+          <div><label for="eqSerial">Serial</label><input id="eqSerial" /></div>
+          <div><label for="eqProcesador">Procesador</label><input id="eqProcesador" /></div>
+          <div><label for="eqRam">Memoria RAM</label><input id="eqRam" /></div>
+          <div><label for="eqTipoMemoria">Tipo de memoria</label><input id="eqTipoMemoria" /></div>
+          <div><label for="eqDisco">Disco duro</label><input id="eqDisco" /></div>
+          <div><label for="eqTipoDisco">Tipo de disco</label><input id="eqTipoDisco" /></div>
+          <div><label for="eqLicenciaSO">Sistema operativo</label><input id="eqLicenciaSO" placeholder="Ej: Windows 11 Pro" /></div>
+          <div><label for="eqTipoLicencia">Tipo de licencia</label><input id="eqTipoLicencia" placeholder="Ej: OEM, retail, sin licencia" /></div>
+          <div class="full"><label for="eqComentarios">Comentarios</label><textarea id="eqComentarios" rows="2"></textarea></div>
+          <div><label for="eqRegistradoPor">Registrado por</label><input id="eqRegistradoPor" /></div>
+        </div>
+        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnGuardarEquipo">Guardar equipo</button>
+        <div class="error-msg" id="equipoError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Equipos registrados</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Fecha</th><th>Tipo</th><th>Nombre de red</th><th>Sitio</th><th>Responsable</th>
+              <th>Referencia</th><th>Serial</th><th>Procesador</th><th>RAM</th><th>Tipo mem.</th>
+              <th>Disco</th><th>Tipo disco</th><th>SO</th><th>Licencia</th><th>Comentarios</th><th>Registró</th><th></th>
+            </tr></thead>
+            <tbody id="tablaEquipos"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="equiposEmpty" style="display:none;">Sin equipos para esta empresa todavía.</div>
+      </div>
+    </section>
+
+    <!-- ---------- Vista: Contraseñas ---------- -->
+    <section class="view" id="view-credenciales">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg></div>
+        <div>
+          <h1>Contraseñas administrativas</h1>
+          <p class="sub">Correo, routers, paneles de hosting, etc. — visibles para todo el equipo.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="credEmpresaSelect">Empresa</label>
+          <select id="credEmpresaSelect"></select>
+        </div>
+        <button class="btn-secondary" id="btnExportarCredenciales">Exportar a Excel</button>
+      </div>
+
+      <div class="card">
+        <h3>Nueva credencial</h3>
+        <div class="form-grid">
+          <div><label for="credServicio">Servicio</label><input id="credServicio" placeholder="Ej: Correo administrativo" /></div>
+          <div><label for="credUsuario">Usuario</label><input id="credUsuario" /></div>
+          <div><label for="credPassword">Contraseña</label><input id="credPassword" /></div>
+          <div class="full"><label for="credNotas">Notas</label><textarea id="credNotas" rows="2"></textarea></div>
+        </div>
+        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnGuardarCredencial">Guardar credencial</button>
+        <div class="error-msg" id="credencialError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Credenciales guardadas</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Servicio</th><th>Usuario</th><th>Contraseña</th><th>Notas</th><th></th></tr></thead>
+            <tbody id="tablaCredenciales"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="credencialesEmpty" style="display:none;">Sin credenciales para esta empresa todavía.</div>
+      </div>
+    </section>
+
+    <!-- ---------- Vista: Personal (privada por usuario) ---------- -->
+    <section class="view" id="view-personal">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div>
+          <h1 id="personalTitulo">Personal</h1>
+          <p class="sub">Tus contraseñas privadas (correo, cuentas personales, etc.) — nadie más las ve, ni siquiera el administrador.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Nombre de este apartado</h3>
+        <div class="toolbar">
+          <div class="field">
+            <label for="personalNombre">Ej: SANTI</label>
+            <input type="text" id="personalNombre" placeholder="Ej: SANTI" />
+          </div>
+          <button class="btn-secondary" id="btnGuardarNombrePersonal">Guardar nombre</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Nueva contraseña personal</h3>
+        <div class="form-grid">
+          <div><label for="persServicio">Servicio</label><input id="persServicio" placeholder="Ej: Correo personal" /></div>
+          <div><label for="persUsuario">Usuario</label><input id="persUsuario" /></div>
+          <div><label for="persPassword">Contraseña</label><input id="persPassword" /></div>
+          <div class="full"><label for="persNotas">Notas</label><textarea id="persNotas" rows="2"></textarea></div>
+        </div>
+        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnGuardarPersonal">Guardar</button>
+        <div class="error-msg" id="personalError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Tus contraseñas</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Servicio</th><th>Usuario</th><th>Contraseña</th><th>Notas</th><th></th></tr></thead>
+            <tbody id="tablaPersonal"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="personalEmpty" style="display:none;">Todavía no tienes contraseñas personales guardadas.</div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
