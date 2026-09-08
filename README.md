@@ -136,3 +136,4 @@ empresa (útil para una entrega o respaldo).
 Edita `index.html`, `app.js` o `style.css` y vuelve a subir los archivos
 actualizados al mismo repositorio (reemplazando los anteriores) — GitHub
 Pages se actualiza solo en 1-2 minutos.
+
