@@ -589,7 +589,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
-        <h3>Crear usuario nuevo</h3>
+        <h3 id="usuarioFormTitulo">Crear usuario nuevo</h3>
         <div class="form-grid">
           <div><label for="nuevoUsuario">Usuario</label><input id="nuevoUsuario" placeholder="Ej: maria.perez" /></div>
           <div><label for="nuevoNombre">Nombre</label><input id="nuevoNombre" placeholder="Ej: María Pérez" /></div>
@@ -602,7 +602,10 @@ tbody tr:last-child td { border-bottom: none; }
             </select>
           </div>
         </div>
-        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnCrearUsuario">Crear usuario</button>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnCrearUsuario">Crear usuario</button>
+          <button class="btn-secondary" style="display:none;" id="btnCancelarEdicionUsuario">Cancelar</button>
+        </div>
         <div class="error-msg" id="usuarioError"></div>
       </div>
 
@@ -610,7 +613,7 @@ tbody tr:last-child td { border-bottom: none; }
         <h3>Usuarios del equipo</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Nombre</th><th>Rol</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Rol</th><th></th></tr></thead>
             <tbody id="tablaUsuarios"></tbody>
           </table>
         </div>

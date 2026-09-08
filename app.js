@@ -392,14 +392,46 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
 });
 
 // ------------------------------------------------------------
-// Equipo (solo admin): crear colaboradores sin salir de la app.
-// Llama a la Edge Function "crear-usuario", que corre en el
-// servidor de Supabase con la llave secreta — esa llave nunca
-// llega al navegador.
+// Equipo (solo admin): crear, editar y eliminar colaboradores sin
+// salir de la app. Llama a las Edge Functions "crear-usuario" y
+// "gestionar-usuario", que corren en el servidor de Supabase con
+// la llave secreta — esa llave nunca llega al navegador.
 // ------------------------------------------------------------
+
+let usuarioEditandoId = null;
 
 $("btnCrearUsuario").addEventListener("click", async () => {
   $("usuarioError").textContent = "";
+
+  // ---- Modo edición: guardar cambios de un usuario existente ----
+  if (usuarioEditandoId) {
+    const nombre = $("nuevoNombre").value.trim();
+    const password = $("nuevoPassword").value.trim();
+    const rol = $("nuevoRol").value;
+
+    if (password && password.length < 6) {
+      $("usuarioError").textContent = "La contraseña debe tener al menos 6 caracteres.";
+      return;
+    }
+
+    $("btnCrearUsuario").disabled = true;
+    const { data, error } = await sb.functions.invoke("gestionar-usuario", {
+      body: { accion: "editar", userId: usuarioEditandoId, nombre, rol, password },
+    });
+    $("btnCrearUsuario").disabled = false;
+
+    if (error || data?.error) {
+      $("usuarioError").textContent = "Error: " + (data?.error || error.message);
+      return;
+    }
+
+    toast("Usuario actualizado.");
+    cancelarEdicionUsuario();
+    await cargarUsuarios();
+    return;
+  }
+
+  // ---- Modo crear: usuario nuevo ----
   const usuario = $("nuevoUsuario").value.trim();
   const nombre = $("nuevoNombre").value.trim() || usuario;
   const password = $("nuevoPassword").value.trim();
@@ -425,6 +457,56 @@ $("btnCrearUsuario").addEventListener("click", async () => {
   await cargarUsuarios();
 });
 
+$("btnCancelarEdicionUsuario").addEventListener("click", cancelarEdicionUsuario);
+
+function iniciarEdicionUsuario(id, nombre, rol) {
+  usuarioEditandoId = id;
+  $("nuevoUsuario").value = "";
+  $("nuevoUsuario").disabled = true;
+  $("nuevoUsuario").placeholder = "No se puede cambiar aquí";
+  $("nuevoNombre").value = nombre || "";
+  $("nuevoPassword").value = "";
+  $("nuevoPassword").placeholder = "Deja en blanco para no cambiarla";
+  $("nuevoRol").value = rol === "admin" ? "admin" : "tecnico";
+  $("usuarioFormTitulo").textContent = "Editar usuario";
+  $("btnCrearUsuario").textContent = "Guardar cambios";
+  $("btnCancelarEdicionUsuario").style.display = "inline-block";
+  $("usuarioError").textContent = "";
+  $("view-equipo").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cancelarEdicionUsuario() {
+  usuarioEditandoId = null;
+  $("nuevoUsuario").disabled = false;
+  $("nuevoUsuario").placeholder = "Ej: maria.perez";
+  $("nuevoUsuario").value = "";
+  $("nuevoNombre").value = "";
+  $("nuevoPassword").value = "";
+  $("nuevoPassword").placeholder = "Mínimo 6 caracteres";
+  $("nuevoRol").value = "tecnico";
+  $("usuarioFormTitulo").textContent = "Crear usuario nuevo";
+  $("btnCrearUsuario").textContent = "Crear usuario";
+  $("btnCancelarEdicionUsuario").style.display = "none";
+  $("usuarioError").textContent = "";
+}
+
+async function eliminarUsuario(id) {
+  if (!confirm("¿Eliminar este usuario? Esta acción no se puede deshacer.")) return;
+
+  const { data, error } = await sb.functions.invoke("gestionar-usuario", {
+    body: { accion: "eliminar", userId: id },
+  });
+
+  if (error || data?.error) {
+    toast("Error al eliminar: " + (data?.error || error.message), true);
+    return;
+  }
+
+  if (usuarioEditandoId === id) cancelarEdicionUsuario();
+  toast("Usuario eliminado.");
+  await cargarUsuarios();
+}
+
 async function cargarUsuarios() {
   const tbody = $("tablaUsuarios");
   if (!tbody) return;
@@ -440,11 +522,26 @@ async function cargarUsuarios() {
   $("usuariosEmpty").style.display = (data && data.length) ? "none" : "block";
 
   (data || []).forEach((r) => {
+    const esYo = sesion && r.id === sesion.user.id;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(r.nombre)}</td>
-      <td><span class="pill">${r.rol === "admin" ? "Administrador" : "Técnico"}</span></td>`;
+      <td><span class="pill">${r.rol === "admin" ? "Administrador" : "Técnico"}</span></td>
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-usuario="${r.id}" data-nombre="${escapeAttr(r.nombre || "")}" data-rol="${r.rol}">Editar</button>
+        ${esYo ? "" : `<button class="icon-btn danger" data-borrar-usuario="${r.id}">Eliminar</button>`}
+      </td>`;
     tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("[data-editar-usuario]").forEach((b) => {
+    b.addEventListener("click", () => {
+      iniciarEdicionUsuario(b.dataset.editarUsuario, b.dataset.nombre, b.dataset.rol);
+    });
+  });
+
+  tbody.querySelectorAll("[data-borrar-usuario]").forEach((b) => {
+    b.addEventListener("click", () => eliminarUsuario(b.dataset.borrarUsuario));
   });
 }
 
