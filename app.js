@@ -2,7 +2,7 @@
 // Helpdesk TI — lógica de la app (usa Supabase como backend)
 // ============================================================
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let sesion = null;
 let perfil = null; // { rol: 'admin' | 'tecnico', nombre }
@@ -24,7 +24,7 @@ function toast(msg, isError) {
 // ------------------------------------------------------------
 
 async function init() {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await sb.auth.getSession();
   if (data.session) {
     await entrarApp(data.session);
   } else {
@@ -40,7 +40,7 @@ function mostrarLogin() {
 async function entrarApp(session) {
   sesion = session;
 
-  const { data: perfilData, error } = await supabase
+  const { data: perfilData, error } = await sb
     .from("usuarios_perfil")
     .select("rol, nombre")
     .eq("id", session.user.id)
@@ -86,7 +86,7 @@ $("loginForm").addEventListener("submit", async (e) => {
   const email = usuarioAEmail($("loginEmail").value);
   const password = $("loginPassword").value;
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   $("loginBtn").disabled = false;
 
   if (error) {
@@ -97,7 +97,7 @@ $("loginForm").addEventListener("submit", async (e) => {
 });
 
 $("logoutBtn").addEventListener("click", async () => {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   sesion = null;
   perfil = null;
   mostrarLogin();
@@ -121,14 +121,14 @@ document.querySelectorAll(".nav-btn[data-view]").forEach((btn) => {
 // ------------------------------------------------------------
 
 async function cargarEmpresas() {
-  const { data, error } = await supabase.from("empresas").select("*").order("nombre");
+  const { data, error } = await sb.from("empresas").select("*").order("nombre");
   if (error) { toast("No se pudo cargar empresas: " + error.message, true); return; }
   empresas = data || [];
 
   // Contadores para la tabla de empresas
   const [{ data: eq }, credRes] = await Promise.all([
-    supabase.from("equipos").select("empresa_id"),
-    supabase.from("credenciales").select("empresa_id"),
+    sb.from("equipos").select("empresa_id"),
+    sb.from("credenciales").select("empresa_id"),
   ]);
   const cred = credRes.data || [];
 
@@ -170,7 +170,7 @@ async function cargarEmpresas() {
 $("btnCrearEmpresa").addEventListener("click", async () => {
   const nombre = $("nuevaEmpresaNombre").value.trim();
   if (!nombre) { toast("Escribe el nombre de la empresa.", true); return; }
-  const { error } = await supabase.from("empresas").insert({ nombre });
+  const { error } = await sb.from("empresas").insert({ nombre });
   if (error) { toast("Error al crear: " + error.message, true); return; }
   $("nuevaEmpresaNombre").value = "";
   toast("Empresa agregada.");
@@ -178,7 +178,7 @@ $("btnCrearEmpresa").addEventListener("click", async () => {
 });
 
 async function borrarEmpresa(id) {
-  const { error } = await supabase.from("empresas").delete().eq("id", id);
+  const { error } = await sb.from("empresas").delete().eq("id", id);
   if (error) { toast("Error al borrar: " + error.message, true); return; }
   toast("Empresa eliminada.");
   await cargarEmpresas();
@@ -214,7 +214,7 @@ $("btnGuardarEquipo").addEventListener("click", async () => {
     return;
   }
 
-  const { error } = await supabase.from("equipos").insert({
+  const { error } = await sb.from("equipos").insert({
     empresa_id: empresaInvActual,
     tipo_equipo: valores.tipoEquipo,
     nombre_red: valores.nombreRed,
@@ -246,7 +246,7 @@ async function cargarEquipos() {
   tbody.innerHTML = "";
   if (!empresaInvActual) { $("equiposEmpty").style.display = "block"; $("equiposEmpty").textContent = "Selecciona una empresa arriba."; return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("equipos").select("*")
     .eq("empresa_id", empresaInvActual)
     .order("created_at", { ascending: false });
@@ -273,7 +273,7 @@ async function cargarEquipos() {
 
   document.querySelectorAll("[data-borrar-equipo]").forEach((b) => {
     b.addEventListener("click", async () => {
-      const { error } = await supabase.from("equipos").delete().eq("id", b.dataset.borrarEquipo);
+      const { error } = await sb.from("equipos").delete().eq("id", b.dataset.borrarEquipo);
       if (error) { toast("Error al borrar: " + error.message, true); return; }
       await cargarEquipos();
       await cargarEmpresas();
@@ -283,7 +283,7 @@ async function cargarEquipos() {
 
 $("btnExportarInventario").addEventListener("click", async () => {
   if (!empresaInvActual) { toast("Selecciona una empresa primero.", true); return; }
-  const { data, error } = await supabase.from("equipos").select("*").eq("empresa_id", empresaInvActual).order("created_at");
+  const { data, error } = await sb.from("equipos").select("*").eq("empresa_id", empresaInvActual).order("created_at");
   if (error) { toast("Error al exportar: " + error.message, true); return; }
   const nombreEmpresa = empresas.find((e) => e.id === empresaInvActual)?.nombre || "empresa";
 
@@ -313,7 +313,7 @@ $("btnGuardarCredencial").addEventListener("click", async () => {
   const servicio = $("credServicio").value.trim();
   if (!servicio) { $("credencialError").textContent = "Indica a qué servicio pertenece (ej: correo, router)."; return; }
 
-  const { error } = await supabase.from("credenciales").insert({
+  const { error } = await sb.from("credenciales").insert({
     empresa_id: empresaCredActual,
     servicio,
     usuario: $("credUsuario").value.trim(),
@@ -333,7 +333,7 @@ async function cargarCredenciales() {
   tbody.innerHTML = "";
   if (!empresaCredActual) { $("credencialesEmpty").style.display = "block"; $("credencialesEmpty").textContent = "Selecciona una empresa arriba."; return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("credenciales").select("*")
     .eq("empresa_id", empresaCredActual)
     .order("created_at", { ascending: false });
@@ -368,7 +368,7 @@ async function cargarCredenciales() {
 
   document.querySelectorAll("[data-borrar-cred]").forEach((b) => {
     b.addEventListener("click", async () => {
-      const { error } = await supabase.from("credenciales").delete().eq("id", b.dataset.borrarCred);
+      const { error } = await sb.from("credenciales").delete().eq("id", b.dataset.borrarCred);
       if (error) { toast("Error al borrar: " + error.message, true); return; }
       await cargarCredenciales();
       await cargarEmpresas();
@@ -378,7 +378,7 @@ async function cargarCredenciales() {
 
 $("btnExportarCredenciales").addEventListener("click", async () => {
   if (!empresaCredActual) { toast("Selecciona una empresa primero.", true); return; }
-  const { data, error } = await supabase.from("credenciales").select("*").eq("empresa_id", empresaCredActual).order("created_at");
+  const { data, error } = await sb.from("credenciales").select("*").eq("empresa_id", empresaCredActual).order("created_at");
   if (error) { toast("Error al exportar: " + error.message, true); return; }
   const nombreEmpresa = empresas.find((e) => e.id === empresaCredActual)?.nombre || "empresa";
 
@@ -395,7 +395,7 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
 $("btnGuardarNombrePersonal").addEventListener("click", async () => {
   const nombre = $("personalNombre").value.trim();
   if (!nombre) { toast("Escribe un nombre para tu apartado.", true); return; }
-  const { error } = await supabase.from("usuarios_perfil").update({ nombre }).eq("id", sesion.user.id);
+  const { error } = await sb.from("usuarios_perfil").update({ nombre }).eq("id", sesion.user.id);
   if (error) { toast("Error al guardar: " + error.message, true); return; }
   perfil.nombre = nombre;
   const etiqueta = nombre.toUpperCase() + " PERSONAL";
@@ -409,7 +409,7 @@ $("btnGuardarPersonal").addEventListener("click", async () => {
   const servicio = $("persServicio").value.trim();
   if (!servicio) { $("personalError").textContent = "Indica a qué servicio pertenece (ej: correo personal)."; return; }
 
-  const { error } = await supabase.from("credenciales_personales").insert({
+  const { error } = await sb.from("credenciales_personales").insert({
     user_id: sesion.user.id,
     servicio,
     usuario: $("persUsuario").value.trim(),
@@ -427,7 +427,7 @@ async function cargarPersonal() {
   const tbody = $("tablaPersonal");
   tbody.innerHTML = "";
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("credenciales_personales").select("*")
     .eq("user_id", sesion.user.id)
     .order("created_at", { ascending: false });
@@ -461,7 +461,7 @@ async function cargarPersonal() {
 
   document.querySelectorAll("[data-borrar-personal]").forEach((b) => {
     b.addEventListener("click", async () => {
-      const { error } = await supabase.from("credenciales_personales").delete().eq("id", b.dataset.borrarPersonal);
+      const { error } = await sb.from("credenciales_personales").delete().eq("id", b.dataset.borrarPersonal);
       if (error) { toast("Error al borrar: " + error.message, true); return; }
       await cargarPersonal();
     });
