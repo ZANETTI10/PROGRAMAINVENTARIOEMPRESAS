@@ -28,6 +28,7 @@
   --accent-grad: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
   --danger: #fb7185;
   --ok: #34d399;
+  --warn: #fbbf24;
   --radius: 14px;
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, -apple-system, sans-serif;
@@ -311,6 +312,11 @@ tbody tr:last-child td { border-bottom: none; }
 
 .pill-ok { background: rgba(52, 211, 153, 0.14); color: var(--ok); border: 1px solid rgba(52, 211, 153, 0.3); }
 .pill-bad { background: rgba(251, 113, 133, 0.14); color: var(--danger); border: 1px solid rgba(251, 113, 133, 0.3); }
+.pill-warn { background: rgba(251, 191, 36, 0.14); color: var(--warn); border: 1px solid rgba(251, 191, 36, 0.3); }
+.diag-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); font-size: 0.85rem; }
+.diag-row:last-child { border-bottom: none; }
+.diag-msg { color: var(--text); }
+.diag-ok { color: var(--ok); font-size: 0.85rem; padding: 6px 0; }
 
 .mon-card h3 { display: flex; align-items: center; gap: 10px; }
 .mon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); font-size: 0.85rem; flex-wrap: wrap; }

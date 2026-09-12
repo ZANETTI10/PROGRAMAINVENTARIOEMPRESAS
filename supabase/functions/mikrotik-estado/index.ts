@@ -295,6 +295,16 @@ async function consultarRouter(r: Record<string, any>) {
     const interfaces = await api.comando(["/interface/print"]);
     const buscar = (nombre: string) => interfaces.find((i) => i.name === nombre);
 
+    // Detalle de VLANs (ID y sobre qué interfaz física van), para poder
+    // mostrarlas identificadas dentro de la lista de interfaces.
+    let vlans: Record<string, string>[] = [];
+    try {
+      vlans = await api.comando(["/interface/vlan/print"]);
+    } catch (_e) {
+      vlans = [];
+    }
+    const vlanPorNombre = new Map(vlans.map((v) => [v.name, v]));
+
     const medirTrafico = async (nombreIf: string | undefined) => {
       if (!nombreIf || !api) return null;
       try {
@@ -311,6 +321,11 @@ async function consultarRouter(r: Record<string, any>) {
 
     const todasInterfaces: Record<string, unknown>[] = [];
     for (const i of interfaces) {
+      const vlanInfo = i.type === "vlan" ? vlanPorNombre.get(i.name) : undefined;
+      const extraVlan = vlanInfo
+        ? { vlan_id: vlanInfo["vlan-id"] || null, vlan_padre: vlanInfo["interface"] || null }
+        : { vlan_id: null, vlan_padre: null };
+
       if (i.disabled === "true") {
         todasInterfaces.push({
           nombre: i.name,
@@ -319,6 +334,7 @@ async function consultarRouter(r: Record<string, any>) {
           deshabilitada: true,
           rx_bps: null,
           tx_bps: null,
+          ...extraVlan,
         });
         continue;
       }
@@ -330,6 +346,7 @@ async function consultarRouter(r: Record<string, any>) {
         deshabilitada: false,
         rx_bps: t?.rx_bps ?? null,
         tx_bps: t?.tx_bps ?? null,
+        ...extraVlan,
       });
     }
 
@@ -356,6 +373,63 @@ async function consultarRouter(r: Record<string, any>) {
       dispositivos = leases.filter((l) => l.status === "bound").length;
     } catch (_e) {
       dispositivos = -1;
+    }
+
+    // ---- Registros del router con errores/advertencias recientes ----
+    // Ayuda a ver "qué puede estar fallando" sin tener que abrir WinBox:
+    // se revisan los últimos logs y se separan los que MikroTik marcó
+    // como error o crítico (temas como "critical", "error", "firewall",
+    // caídas de PPPoE, DHCP, wireless, etc.).
+    let logs: Record<string, unknown>[] = [];
+    try {
+      const todosLogs = await api.comando(["/log/print"]);
+      logs = todosLogs
+        .filter((l) => /error|critical/i.test(l.topics || ""))
+        .slice(-15)
+        .reverse()
+        .map((l) => ({ tiempo: l.time || null, temas: l.topics || null, mensaje: l.message || null }));
+    } catch (_e) {
+      logs = [];
+    }
+
+    // ---- Diagnóstico automático: reglas simples para detectar fallas comunes ----
+    const diagnostico: { nivel: "alerta" | "advertencia"; mensaje: string }[] = [];
+
+    if (sistema?.cpu_carga != null && (sistema.cpu_carga as number) >= 80) {
+      diagnostico.push({ nivel: "alerta", mensaje: `CPU muy alta: ${sistema.cpu_carga}%.` });
+    }
+    if (sistema?.memoria_libre != null && sistema?.memoria_total) {
+      const pctLibre = (sistema.memoria_libre as number) / (sistema.memoria_total as number);
+      if (pctLibre < 0.15) {
+        diagnostico.push({ nivel: "alerta", mensaje: `Memoria RAM casi agotada: ${(pctLibre * 100).toFixed(0)}% libre.` });
+      }
+    }
+    if (salud?.temperature && parseFloat(salud.temperature) >= 65) {
+      diagnostico.push({ nivel: "alerta", mensaje: `Temperatura alta: ${salud.temperature} °C.` });
+    }
+    if (!wanIf) {
+      diagnostico.push({ nivel: "alerta", mensaje: `No se encontró la interfaz WAN configurada ("${r.wan_interface}").` });
+    } else if (!(wanMedida as any)?.activa) {
+      diagnostico.push({ nivel: "alerta", mensaje: `La interfaz WAN (${wanIf.name}) está caída.` });
+    } else if (!wanIp) {
+      diagnostico.push({ nivel: "advertencia", mensaje: `La interfaz WAN (${wanIf.name}) no tiene IP asignada.` });
+    }
+    if (!lanIf) {
+      diagnostico.push({ nivel: "alerta", mensaje: `No se encontró la interfaz LAN configurada ("${r.lan_interface}").` });
+    } else if (!(lanMedida as any)?.activa) {
+      diagnostico.push({ nivel: "alerta", mensaje: `La interfaz LAN (${lanIf.name}) está caída.` });
+    }
+    for (const v of todasInterfaces) {
+      if (v.tipo === "vlan" && !v.deshabilitada && !v.activa) {
+        diagnostico.push({ nivel: "advertencia", mensaje: `La VLAN "${v.nombre}" está caída.` });
+      }
+    }
+    for (const l of logs.slice(0, 5)) {
+      const esCritico = String(l.temas || "").includes("critical");
+      diagnostico.push({
+        nivel: esCritico ? "alerta" : "advertencia",
+        mensaje: `Registro del router${l.tiempo ? ` (${l.tiempo})` : ""}: ${l.mensaje || "sin detalle"}.`,
+      });
     }
 
     return {
@@ -385,6 +459,8 @@ async function consultarRouter(r: Record<string, any>) {
         : { error: `No se encontró la interfaz "${r.lan_interface}".` },
       dispositivos_conectados: dispositivos,
       interfaces: todasInterfaces,
+      diagnostico,
+      logs,
     };
   } catch (e) {
     return { ...base, conectado: false, error: String(e?.message || e) };

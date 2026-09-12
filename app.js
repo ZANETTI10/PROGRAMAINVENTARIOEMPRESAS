@@ -479,12 +479,31 @@ function pintarInterfazFila(i) {
   const estado = i.deshabilitada ? "Deshabilitada" : (i.activa ? "Activa" : "Caída");
   const clase = i.deshabilitada ? "pill-bad" : (i.activa ? "pill-ok" : "pill-bad");
   const velocidad = i.deshabilitada ? "" : `↓ ${formatBps(i.rx_bps)} · ↑ ${formatBps(i.tx_bps)}`;
+  const esVlan = i.tipo === "vlan";
+  const detalleVlan = esVlan ? ` <span class="mon-if-name">· VLAN ${escapeHtml(i.vlan_id || "?")} sobre ${escapeHtml(i.vlan_padre || "?")}</span>` : "";
   return `
     <div class="mon-row">
-      <span>${escapeHtml(i.nombre)} <span class="mon-if-name">(${escapeHtml(i.tipo || "?")})</span></span>
+      <span>${esVlan ? "📶 " : ""}${escapeHtml(i.nombre)} <span class="mon-if-name">(${escapeHtml(i.tipo || "?")})</span>${detalleVlan}</span>
       <span class="pill ${clase}">${estado}</span>
       <span class="mon-speed">${velocidad}</span>
     </div>`;
+}
+
+function pintarDiagnostico(diagnostico, logs) {
+  const items = diagnostico || [];
+  if (items.length === 0) {
+    return `<div class="stat-label" style="margin:18px 0 4px;">Diagnóstico</div><div class="diag-ok">✓ No se detectaron problemas.</div>`;
+  }
+  const filas = items.map((d) => {
+    const clase = d.nivel === "alerta" ? "pill-bad" : "pill-warn";
+    const icono = d.nivel === "alerta" ? "⛔" : "⚠️";
+    return `
+      <div class="diag-row">
+        <span class="pill ${clase}">${icono}</span>
+        <span class="diag-msg">${escapeHtml(d.mensaje)}</span>
+      </div>`;
+  }).join("");
+  return `<div class="stat-label" style="margin:18px 0 4px;">Diagnóstico (${items.length})</div>${filas}`;
 }
 
 function pintarRouterEstado(r) {
@@ -507,6 +526,7 @@ function pintarRouterEstado(r) {
     <div class="mon-row"><span>Temperatura / Voltaje</span><span>${salud.temperature ? salud.temperature + " °C" : "—"} · ${salud.voltage ? salud.voltage + " V" : "—"}</span></div>
   ` : "";
   const interfacesLista = (r.interfaces || []).map(pintarInterfazFila).join("");
+  const diagnosticoHtml = pintarDiagnostico(r.diagnostico, r.logs);
 
   return `
     <div class="card mon-card">
@@ -516,6 +536,7 @@ function pintarRouterEstado(r) {
       ${pintarInterfaz("WAN", r.wan)}
       ${pintarInterfaz("LAN", r.lan)}
       <div class="mon-row"><span>Dispositivos conectados (DHCP)</span><span class="pill">${dispositivos}</span></div>
+      ${diagnosticoHtml}
       <div class="stat-label" style="margin:18px 0 4px;">Todas las interfaces</div>
       ${interfacesLista}
     </div>`;
