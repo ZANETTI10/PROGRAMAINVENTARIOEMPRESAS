@@ -66,6 +66,7 @@ async function entrarApp(session) {
   await cargarEmpresas();
   await cargarPersonal();
   if (perfil.rol === "admin") await cargarUsuarios();
+  cargarDashboard();
 }
 
 function usuarioAEmail(valor) {
@@ -118,6 +119,96 @@ document.querySelectorAll(".nav-btn[data-view]").forEach((btn) => {
     $("view-" + btn.dataset.view).classList.add("active");
   });
 });
+
+// ------------------------------------------------------------
+// Dashboard general — resumen del estado de TODAS las empresas de un
+// vistazo (usa la misma Edge Function "mikrotik-estado", en modo
+// liviano con { todas: true }, que consulta todos los routers en
+// paralelo entre sí sin medir tráfico de cada interfaz, para que sea
+// rápido aunque haya muchas empresas).
+// ------------------------------------------------------------
+
+$("btnActualizarDashboard").addEventListener("click", cargarDashboard);
+
+async function cargarDashboard() {
+  $("btnActualizarDashboard").disabled = true;
+  $("btnActualizarDashboard").textContent = "Actualizando…";
+  $("dashMensaje").style.display = "none";
+
+  const { data, error } = await sb.functions.invoke("mikrotik-estado", { body: { todas: true } });
+
+  $("btnActualizarDashboard").disabled = false;
+  $("btnActualizarDashboard").textContent = "Actualizar estado";
+
+  if (error || data?.error) {
+    $("dashMensaje").style.display = "block";
+    $("dashMensaje").textContent = "Error: " + (data?.error || error.message);
+    $("dashGrid").innerHTML = "";
+    return;
+  }
+
+  const items = data.empresas || [];
+  if (items.length === 0) {
+    $("dashMensaje").style.display = "block";
+    $("dashMensaje").textContent = "Todavía no hay empresas registradas.";
+    $("dashGrid").innerHTML = "";
+    return;
+  }
+
+  $("dashGrid").innerHTML = items.map(pintarDashCard).join("");
+  $("dashActualizado").style.display = "inline";
+  $("dashActualizado").textContent = "Actualizado a las " + new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+
+  $("dashGrid").querySelectorAll("[data-dash-empresa]").forEach((el) => {
+    el.addEventListener("click", () => irAMonitoreoDesdeDashboard(el.dataset.dashEmpresa));
+  });
+}
+
+function pintarDashCard(item) {
+  const routers = item.routers || [];
+
+  if (routers.length === 0) {
+    return `
+      <div class="dash-card dash-sin-router" data-dash-empresa="${item.empresa_id}">
+        <div class="dash-card-top"><h4>${escapeHtml(item.empresa_nombre)}</h4><span class="pill">Sin router</span></div>
+        <div class="dash-card-sub">No tiene un router MikroTik configurado todavía.</div>
+      </div>`;
+  }
+
+  let alertas = 0, advertencias = 0, fuera = 0;
+  routers.forEach((r) => {
+    if (!r || !r.conectado) { fuera++; return; }
+    (r.diagnostico || []).forEach((d) => { if (d.nivel === "alerta") alertas++; else advertencias++; });
+  });
+
+  let nivel = "ok";
+  if (fuera > 0 || alertas > 0) nivel = "alerta";
+  else if (advertencias > 0) nivel = "advertencia";
+
+  const estadoClase = nivel === "alerta" ? "pill-bad" : (nivel === "advertencia" ? "pill-warn" : "pill-ok");
+  const estadoTxt = fuera > 0
+    ? `${fuera} de ${routers.length} sin conexión`
+    : (nivel === "ok" ? "Todo bien" : `${alertas + advertencias} hallazgo${(alertas + advertencias) > 1 ? "s" : ""}`);
+
+  const badges = [];
+  if (alertas > 0) badges.push(`<span class="pill pill-bad">⛔ ${alertas}</span>`);
+  if (advertencias > 0) badges.push(`<span class="pill pill-warn">⚠️ ${advertencias}</span>`);
+  if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ Sin problemas</span>`);
+
+  return `
+    <div class="dash-card dash-${nivel}" data-dash-empresa="${item.empresa_id}">
+      <div class="dash-card-top"><h4>${escapeHtml(item.empresa_nombre)}</h4><span class="pill ${estadoClase}">${estadoTxt}</span></div>
+      <div class="dash-card-sub">${routers.length} router${routers.length > 1 ? "es" : ""} configurado${routers.length > 1 ? "s" : ""}</div>
+      <div class="dash-badges">${badges.join("")}</div>
+    </div>`;
+}
+
+function irAMonitoreoDesdeDashboard(empresaId) {
+  $("navMonitoreo").click();
+  $("monEmpresaSelect").value = empresaId;
+  $("monEmpresaSelect").dispatchEvent(new Event("change"));
+  setTimeout(() => $("btnVerificarMonitoreo").click(), 60);
+}
 
 // ------------------------------------------------------------
 // Empresas

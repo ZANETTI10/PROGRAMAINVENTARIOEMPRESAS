@@ -223,6 +223,44 @@ Deno.serve(async (req) => {
     if (callerError || !callerData?.user) return json({ error: "Sesión inválida." }, 401);
 
     const body = await req.json();
+
+    // ---- Modo "dashboard": resumen liviano de TODAS las empresas a la
+    // vez (para la vista general), en vez del detalle completo de una
+    // sola. Consulta menos cosas por router (sin medir tráfico de cada
+    // interfaz una por una) para que sea rápido con muchas empresas.
+    if (body.todas === true) {
+      const { data: empresasList, error: empresasError } = await admin
+        .from("empresas")
+        .select("id, nombre")
+        .order("nombre");
+      if (empresasError) return json({ error: empresasError.message }, 400);
+
+      const { data: todosRouters, error: routersListError } = await admin
+        .from("mikrotik_routers")
+        .select("*");
+      if (routersListError) return json({ error: routersListError.message }, 400);
+
+      const routersLista = todosRouters || [];
+      // Cada router tiene su propia conexión TCP independiente, así que
+      // sí es seguro consultarlos todos en paralelo entre sí (lo que no
+      // se puede paralelizar son varios comandos DENTRO de un mismo
+      // router, eso sigue siendo secuencial dentro de consultarRouter).
+      const resultados = await Promise.all(routersLista.map((r) => consultarRouter(r, false)));
+      const resultadoPorRouterId = new Map(routersLista.map((r, idx) => [r.id, resultados[idx]]));
+
+      const empresasConEstado = (empresasList || []).map((emp) => {
+        const routersDeEmpresa = routersLista.filter((r) => r.empresa_id === emp.id);
+        return {
+          empresa_id: emp.id,
+          empresa_nombre: emp.nombre,
+          routers: routersDeEmpresa.map((r) => resultadoPorRouterId.get(r.id)),
+        };
+      });
+
+      return json({ empresas: empresasConEstado });
+    }
+
+    // ---- Modo normal: detalle completo de una sola empresa ----
     const empresaId = body.empresa_id;
     if (!empresaId) return json({ error: "Falta la empresa." }, 400);
 
@@ -234,14 +272,18 @@ Deno.serve(async (req) => {
     if (routersError) return json({ error: routersError.message }, 400);
     if (!routers || routers.length === 0) return json({ routers: [] });
 
-    const resultados = await Promise.all(routers.map((r) => consultarRouter(r)));
+    const resultados = await Promise.all(routers.map((r) => consultarRouter(r, true)));
     return json({ routers: resultados });
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);
   }
 });
 
-async function consultarRouter(r: Record<string, any>) {
+// El parámetro "detalle" controla si se mide el tráfico (rx/tx) de cada
+// interfaz una por una (varios comandos extra por router) o si solo se
+// trae el estado general — este segundo modo, más liviano, es el que usa
+// el dashboard cuando consulta muchas empresas/routers a la vez.
+async function consultarRouter(r: Record<string, any>, detalle = true) {
   const base = { id: r.id, nombre: r.nombre };
   let api: MikrotikApi | null = null;
 
@@ -338,7 +380,7 @@ async function consultarRouter(r: Record<string, any>) {
         });
         continue;
       }
-      const t = await medirTrafico(i.name);
+      const t = detalle ? await medirTrafico(i.name) : null;
       todasInterfaces.push({
         nombre: i.name,
         tipo: i.type || null,
@@ -355,9 +397,10 @@ async function consultarRouter(r: Record<string, any>) {
     const wanMedida = wanIf ? todasInterfaces.find((x) => x.nombre === wanIf.name) : null;
     const lanMedida = lanIf ? todasInterfaces.find((x) => x.nombre === lanIf.name) : null;
 
-    // ---- IP pública asignada a la interfaz WAN ----
+    // ---- IP pública asignada a la interfaz WAN (se omite en el modo
+    // liviano del dashboard: no la necesita y ahorra un comando más) ----
     let wanIp: string | null = null;
-    if (wanIf) {
+    if (wanIf && detalle) {
       try {
         const direcciones = await api.comando(["/ip/address/print", "?interface=" + wanIf.name]);
         if (direcciones[0]?.address) wanIp = direcciones[0].address;
@@ -458,7 +501,7 @@ async function consultarRouter(r: Record<string, any>) {
           }
         : { error: `No se encontró la interfaz "${r.lan_interface}".` },
       dispositivos_conectados: dispositivos,
-      interfaces: todasInterfaces,
+      ...(detalle ? { interfaces: todasInterfaces } : {}),
       diagnostico,
       logs,
     };

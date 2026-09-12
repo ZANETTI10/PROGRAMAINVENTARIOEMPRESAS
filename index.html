@@ -318,6 +318,30 @@ tbody tr:last-child td { border-bottom: none; }
 .diag-msg { color: var(--text); }
 .diag-ok { color: var(--ok); font-size: 0.85rem; padding: 6px 0; }
 
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.dash-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.06s;
+}
+.dash-card:hover { border-color: var(--accent); }
+.dash-card:active { transform: translateY(1px); }
+.dash-card.dash-alerta { border-left: 3px solid var(--danger); }
+.dash-card.dash-advertencia { border-left: 3px solid var(--warn); }
+.dash-card.dash-ok { border-left: 3px solid var(--ok); }
+.dash-card.dash-sin-router { border-left: 3px solid var(--border); opacity: 0.7; }
+.dash-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.dash-card-top h4 { margin: 0; font-size: 0.95rem; font-weight: 700; }
+.dash-card-sub { color: var(--text-faint); font-size: 0.76rem; margin-bottom: 4px; }
+.dash-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
 .mon-card h3 { display: flex; align-items: center; gap: 10px; }
 .mon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); font-size: 0.85rem; flex-wrap: wrap; }
 .mon-row:last-child { border-bottom: none; }
@@ -400,7 +424,11 @@ tbody tr:last-child td { border-bottom: none; }
     <span class="rol-badge" id="rolBadge">técnico</span>
 
     <nav class="nav-group">
-      <button class="nav-btn active" data-view="empresas">
+      <button class="nav-btn active" data-view="dashboard" id="navDashboard">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-btn" data-view="empresas">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 21V7l8-4 8 4v14M9 21v-6h6v6M4 21h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Empresas</span>
       </button>
@@ -437,8 +465,27 @@ tbody tr:last-child td { border-bottom: none; }
 
   <main class="main">
 
+    <!-- ---------- Vista: Dashboard general ---------- -->
+    <section class="view active" id="view-dashboard">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg></div>
+        <div>
+          <h1>Dashboard</h1>
+          <p class="sub">Estado general de todas las empresas de un vistazo — de aquí ves rápido qué toca revisar.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn-primary" style="width:auto; margin-top:0;" id="btnActualizarDashboard">Actualizar estado</button>
+        <span class="empty-state" id="dashActualizado" style="padding:0; display:none;"></span>
+      </div>
+
+      <p class="empty-state" id="dashMensaje" style="padding:14px 0; text-align:left;">Da clic en "Actualizar estado" para consultar todos los routers.</p>
+      <div class="dash-grid" id="dashGrid"></div>
+    </section>
+
     <!-- ---------- Vista: Empresas ---------- -->
-    <section class="view active" id="view-empresas">
+    <section class="view" id="view-empresas">
       <div class="view-head">
         <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 21V7l8-4 8 4v14M9 21v-6h6v6M4 21h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <div>
