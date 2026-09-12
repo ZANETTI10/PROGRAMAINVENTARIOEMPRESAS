@@ -454,16 +454,36 @@ function formatBps(bps) {
   return bps + " bps";
 }
 
+function formatBytes(bytes) {
+  if (bytes === null || bytes === undefined) return "—";
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1024) return (mb / 1024).toFixed(1) + " GB";
+  return mb.toFixed(0) + " MB";
+}
+
 function pintarInterfaz(titulo, info) {
   if (!info) return `<div class="mon-row"><span>${titulo}</span><span class="pill pill-bad">No configurada</span></div>`;
   if (info.error) return `<div class="mon-row"><span>${titulo}</span><span class="pill pill-bad">${escapeHtml(info.error)}</span></div>`;
   const activa = info.activa && !info.deshabilitada;
   const estado = info.deshabilitada ? "Deshabilitada" : (activa ? "Activa" : "Caída");
+  const ip = info.ip ? ` <span class="mon-if-name">· ${escapeHtml(info.ip)}</span>` : "";
   return `
     <div class="mon-row">
-      <span>${titulo} <span class="mon-if-name">(${escapeHtml(info.interfaz)})</span></span>
+      <span>${titulo} <span class="mon-if-name">(${escapeHtml(info.interfaz)})</span>${ip}</span>
       <span class="pill ${activa ? "pill-ok" : "pill-bad"}">${estado}</span>
       <span class="mon-speed">↓ ${formatBps(info.rx_bps)} · ↑ ${formatBps(info.tx_bps)}</span>
+    </div>`;
+}
+
+function pintarInterfazFila(i) {
+  const estado = i.deshabilitada ? "Deshabilitada" : (i.activa ? "Activa" : "Caída");
+  const clase = i.deshabilitada ? "pill-bad" : (i.activa ? "pill-ok" : "pill-bad");
+  const velocidad = i.deshabilitada ? "" : `↓ ${formatBps(i.rx_bps)} · ↑ ${formatBps(i.tx_bps)}`;
+  return `
+    <div class="mon-row">
+      <span>${escapeHtml(i.nombre)} <span class="mon-if-name">(${escapeHtml(i.tipo || "?")})</span></span>
+      <span class="pill ${clase}">${estado}</span>
+      <span class="mon-speed">${velocidad}</span>
     </div>`;
 }
 
@@ -476,12 +496,28 @@ function pintarRouterEstado(r) {
       </div>`;
   }
   const dispositivos = r.dispositivos_conectados >= 0 ? r.dispositivos_conectados : "No disponible";
+  const sis = r.sistema;
+  const infoSistema = sis ? `
+    <div class="mon-row"><span>Equipo</span><span>${escapeHtml(sis.modelo || "—")} · RouterOS ${escapeHtml(sis.version || "—")}</span></div>
+    <div class="mon-row"><span>Encendido hace</span><span>${escapeHtml(sis.uptime || "—")}</span></div>
+    <div class="mon-row"><span>CPU / RAM libre</span><span>${sis.cpu_carga ?? "—"}% · ${formatBytes(sis.memoria_libre)} de ${formatBytes(sis.memoria_total)}</span></div>
+  ` : "";
+  const salud = r.salud || {};
+  const infoSalud = (salud.temperature || salud.voltage) ? `
+    <div class="mon-row"><span>Temperatura / Voltaje</span><span>${salud.temperature ? salud.temperature + " °C" : "—"} · ${salud.voltage ? salud.voltage + " V" : "—"}</span></div>
+  ` : "";
+  const interfacesLista = (r.interfaces || []).map(pintarInterfazFila).join("");
+
   return `
     <div class="card mon-card">
-      <h3>${escapeHtml(r.nombre)} <span class="pill pill-ok">En línea</span></h3>
+      <h3>${escapeHtml(r.nombre)}${r.identidad ? ` <span class="mon-if-name">(${escapeHtml(r.identidad)})</span>` : ""} <span class="pill pill-ok">En línea</span></h3>
+      ${infoSistema}
+      ${infoSalud}
       ${pintarInterfaz("WAN", r.wan)}
       ${pintarInterfaz("LAN", r.lan)}
-      <div class="mon-row"><span>Dispositivos conectados</span><span class="pill">${dispositivos}</span></div>
+      <div class="mon-row"><span>Dispositivos conectados (DHCP)</span><span class="pill">${dispositivos}</span></div>
+      <div class="stat-label" style="margin:18px 0 4px;">Todas las interfaces</div>
+      ${interfacesLista}
     </div>`;
 }
 

@@ -2,15 +2,23 @@
 // Edge Function: mikrotik-estado
 // ------------------------------------------------------------
 // Consulta en vivo, para una empresa, el estado de su(s) router(s)
-// MikroTik: si están en línea, si la interfaz WAN y la LAN están
-// activas, la velocidad de subida/bajada, y cuántos dispositivos
-// están conectados (arrendamientos DHCP activos).
+// MikroTik: información del equipo (modelo, RouterOS, uptime, CPU,
+// RAM, temperatura/voltaje si el equipo lo reporta), la IP pública
+// en la interfaz WAN, el estado y tráfico de TODAS las interfaces
+// (no solo las que se configuren como WAN/LAN), y cuántos
+// dispositivos están conectados (arrendamientos DHCP activos).
 //
 // Se conecta directamente al router por su API nativa (el mismo
 // protocolo que usa WinBox), desde el servidor — nunca desde el
 // navegador. Cualquier usuario logueado (técnico o admin) puede
 // pedir este estado; solo el admin puede cambiar la configuración
 // del router (eso lo hace la función "mikrotik-config").
+//
+// Importante: todas las consultas a un mismo router van UNA POR UNA
+// (secuenciales), nunca en paralelo — comparten una sola conexión
+// TCP y el protocolo de MikroTik no distingue aquí a cuál pregunta
+// pertenece cada respuesta, así que mandar varias a la vez mezclaría
+// los datos.
 // ============================================================
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -241,11 +249,51 @@ async function consultarRouter(r: Record<string, any>) {
     api = await MikrotikApi.conectar(r.host, r.puerto, r.ssl);
     await api.login(r.usuario, r.password);
 
+    // ---- Información general del equipo ----
+    let sistema: Record<string, unknown> | null = null;
+    try {
+      const recurso = (await api.comando(["/system/resource/print"]))[0] || {};
+      sistema = {
+        modelo: recurso["board-name"] || null,
+        version: recurso["version"] || null,
+        uptime: recurso["uptime"] || null,
+        cpu_carga: recurso["cpu-load"] != null ? parseInt(recurso["cpu-load"], 10) : null,
+        memoria_libre: recurso["free-memory"] != null ? parseInt(recurso["free-memory"], 10) : null,
+        memoria_total: recurso["total-memory"] != null ? parseInt(recurso["total-memory"], 10) : null,
+      };
+    } catch (_e) {
+      sistema = null;
+    }
+
+    let identidad: string | null = null;
+    try {
+      const idRow = (await api.comando(["/system/identity/print"]))[0] || {};
+      identidad = idRow.name || null;
+    } catch (_e) {
+      identidad = null;
+    }
+
+    // Temperatura/voltaje: no todos los equipos MikroTik lo reportan
+    // (depende del modelo), así que si falla simplemente se omite.
+    let salud: Record<string, string> | null = null;
+    try {
+      const filasSalud = await api.comando(["/system/health/print"]);
+      if (filasSalud.length > 0) {
+        salud = {};
+        for (const f of filasSalud) {
+          // RouterOS 7: cada fila trae {name, value}. RouterOS 6: una sola
+          // fila con todas las claves directamente.
+          if (f.name && f.value !== undefined) salud[f.name] = f.value;
+          else Object.assign(salud, f);
+        }
+      }
+    } catch (_e) {
+      salud = null;
+    }
+
+    // ---- Interfaces: TODAS, con su tráfico, no solo WAN/LAN ----
     const interfaces = await api.comando(["/interface/print"]);
     const buscar = (nombre: string) => interfaces.find((i) => i.name === nombre);
-
-    const wanIf = buscar(r.wan_interface);
-    const lanIf = buscar(r.lan_interface);
 
     const medirTrafico = async (nombreIf: string | undefined) => {
       if (!nombreIf || !api) return null;
@@ -261,11 +309,47 @@ async function consultarRouter(r: Record<string, any>) {
       }
     };
 
-    const [wanTrafico, lanTrafico] = await Promise.all([
-      medirTrafico(wanIf?.name),
-      medirTrafico(lanIf?.name),
-    ]);
+    const todasInterfaces: Record<string, unknown>[] = [];
+    for (const i of interfaces) {
+      if (i.disabled === "true") {
+        todasInterfaces.push({
+          nombre: i.name,
+          tipo: i.type || null,
+          activa: false,
+          deshabilitada: true,
+          rx_bps: null,
+          tx_bps: null,
+        });
+        continue;
+      }
+      const t = await medirTrafico(i.name);
+      todasInterfaces.push({
+        nombre: i.name,
+        tipo: i.type || null,
+        activa: i.running === "true",
+        deshabilitada: false,
+        rx_bps: t?.rx_bps ?? null,
+        tx_bps: t?.tx_bps ?? null,
+      });
+    }
 
+    const wanIf = buscar(r.wan_interface);
+    const lanIf = buscar(r.lan_interface);
+    const wanMedida = wanIf ? todasInterfaces.find((x) => x.nombre === wanIf.name) : null;
+    const lanMedida = lanIf ? todasInterfaces.find((x) => x.nombre === lanIf.name) : null;
+
+    // ---- IP pública asignada a la interfaz WAN ----
+    let wanIp: string | null = null;
+    if (wanIf) {
+      try {
+        const direcciones = await api.comando(["/ip/address/print", "?interface=" + wanIf.name]);
+        if (direcciones[0]?.address) wanIp = direcciones[0].address;
+      } catch (_e) {
+        wanIp = null;
+      }
+    }
+
+    // ---- Dispositivos conectados (arrendamientos DHCP activos) ----
     let dispositivos = -1;
     try {
       const leases = await api.comando(["/ip/dhcp-server/lease/print"]);
@@ -277,25 +361,30 @@ async function consultarRouter(r: Record<string, any>) {
     return {
       ...base,
       conectado: true,
+      identidad,
+      sistema,
+      salud,
       wan: wanIf
         ? {
             interfaz: wanIf.name,
-            activa: wanIf.running === "true",
-            deshabilitada: wanIf.disabled === "true",
-            rx_bps: wanTrafico?.rx_bps ?? null,
-            tx_bps: wanTrafico?.tx_bps ?? null,
+            ip: wanIp,
+            activa: (wanMedida as any)?.activa ?? false,
+            deshabilitada: (wanMedida as any)?.deshabilitada ?? false,
+            rx_bps: (wanMedida as any)?.rx_bps ?? null,
+            tx_bps: (wanMedida as any)?.tx_bps ?? null,
           }
         : { error: `No se encontró la interfaz "${r.wan_interface}".` },
       lan: lanIf
         ? {
             interfaz: lanIf.name,
-            activa: lanIf.running === "true",
-            deshabilitada: lanIf.disabled === "true",
-            rx_bps: lanTrafico?.rx_bps ?? null,
-            tx_bps: lanTrafico?.tx_bps ?? null,
+            activa: (lanMedida as any)?.activa ?? false,
+            deshabilitada: (lanMedida as any)?.deshabilitada ?? false,
+            rx_bps: (lanMedida as any)?.rx_bps ?? null,
+            tx_bps: (lanMedida as any)?.tx_bps ?? null,
           }
         : { error: `No se encontró la interfaz "${r.lan_interface}".` },
       dispositivos_conectados: dispositivos,
+      interfaces: todasInterfaces,
     };
   } catch (e) {
     return { ...base, conectado: false, error: String(e?.message || e) };
