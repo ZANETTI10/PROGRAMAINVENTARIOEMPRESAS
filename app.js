@@ -166,6 +166,7 @@ async function cargarEmpresas() {
     empresas.map((e) => `<option value="${e.id}">${escapeHtml(e.nombre)}</option>`).join("");
   $("invEmpresaSelect").innerHTML = opciones;
   $("credEmpresaSelect").innerHTML = opciones;
+  $("monEmpresaSelect").innerHTML = opciones;
 
   $("empresaFormCard").style.display = perfil.rol === "admin" ? "block" : "none";
 }
@@ -390,6 +391,222 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
   }));
   exportarExcel(filas, `Credenciales - ${nombreEmpresa}.xlsx`, "Credenciales");
 });
+
+// ------------------------------------------------------------
+// Monitoreo (WAN/LAN en tiempo real vía MikroTik, por empresa).
+// "Verificar ahora" llama a la Edge Function "mikrotik-estado", que se
+// conecta al router desde el servidor (nunca desde el navegador) y
+// devuelve el estado. Configurar el router (solo admin) usa la Edge
+// Function "mikrotik-config" — la contraseña del router jamás se puede
+// leer de vuelta desde la app, solo reemplazar.
+// ------------------------------------------------------------
+
+let empresaMonitoreoActual = null;
+let routerEditandoId = null;
+
+$("monEmpresaSelect").addEventListener("change", async (e) => {
+  empresaMonitoreoActual = e.target.value || null;
+  $("monResultado").innerHTML = "";
+  $("monMensaje").style.display = "block";
+  $("monMensaje").textContent = empresaMonitoreoActual ? "Da clic en \"Verificar ahora\" para ver el estado." : "Selecciona una empresa arriba.";
+
+  if (perfil.rol === "admin") {
+    $("monConfigCard").style.display = empresaMonitoreoActual ? "block" : "none";
+    cancelarEdicionRouter();
+    if (empresaMonitoreoActual) await cargarRoutersConfigurados();
+  }
+});
+
+$("btnVerificarMonitoreo").addEventListener("click", async () => {
+  if (!empresaMonitoreoActual) { toast("Selecciona una empresa primero.", true); return; }
+
+  $("btnVerificarMonitoreo").disabled = true;
+  $("btnVerificarMonitoreo").textContent = "Verificando…";
+  $("monMensaje").style.display = "none";
+  $("monResultado").innerHTML = "";
+
+  const { data, error } = await sb.functions.invoke("mikrotik-estado", {
+    body: { empresa_id: empresaMonitoreoActual },
+  });
+
+  $("btnVerificarMonitoreo").disabled = false;
+  $("btnVerificarMonitoreo").textContent = "Verificar ahora";
+
+  if (error || data?.error) {
+    $("monMensaje").style.display = "block";
+    $("monMensaje").textContent = "Error: " + (data?.error || error.message);
+    return;
+  }
+
+  if (!data.routers || data.routers.length === 0) {
+    $("monMensaje").style.display = "block";
+    $("monMensaje").textContent = "Esta empresa todavía no tiene un router MikroTik configurado.";
+    return;
+  }
+
+  $("monResultado").innerHTML = data.routers.map(pintarRouterEstado).join("");
+});
+
+function formatBps(bps) {
+  if (bps === null || bps === undefined) return "—";
+  if (bps >= 1000000) return (bps / 1000000).toFixed(1) + " Mbps";
+  if (bps >= 1000) return (bps / 1000).toFixed(0) + " Kbps";
+  return bps + " bps";
+}
+
+function pintarInterfaz(titulo, info) {
+  if (!info) return `<div class="mon-row"><span>${titulo}</span><span class="pill pill-bad">No configurada</span></div>`;
+  if (info.error) return `<div class="mon-row"><span>${titulo}</span><span class="pill pill-bad">${escapeHtml(info.error)}</span></div>`;
+  const activa = info.activa && !info.deshabilitada;
+  const estado = info.deshabilitada ? "Deshabilitada" : (activa ? "Activa" : "Caída");
+  return `
+    <div class="mon-row">
+      <span>${titulo} <span class="mon-if-name">(${escapeHtml(info.interfaz)})</span></span>
+      <span class="pill ${activa ? "pill-ok" : "pill-bad"}">${estado}</span>
+      <span class="mon-speed">↓ ${formatBps(info.rx_bps)} · ↑ ${formatBps(info.tx_bps)}</span>
+    </div>`;
+}
+
+function pintarRouterEstado(r) {
+  if (!r.conectado) {
+    return `
+      <div class="card mon-card">
+        <h3>${escapeHtml(r.nombre)} <span class="pill pill-bad">Sin conexión</span></h3>
+        <div class="error-msg" style="margin-top:0;">${escapeHtml(r.error || "No se pudo conectar al router.")}</div>
+      </div>`;
+  }
+  const dispositivos = r.dispositivos_conectados >= 0 ? r.dispositivos_conectados : "No disponible";
+  return `
+    <div class="card mon-card">
+      <h3>${escapeHtml(r.nombre)} <span class="pill pill-ok">En línea</span></h3>
+      ${pintarInterfaz("WAN", r.wan)}
+      ${pintarInterfaz("LAN", r.lan)}
+      <div class="mon-row"><span>Dispositivos conectados</span><span class="pill">${dispositivos}</span></div>
+    </div>`;
+}
+
+// ---- Configurar routers MikroTik (solo admin) ----
+
+$("btnGuardarRouter").addEventListener("click", async () => {
+  $("routerError").textContent = "";
+  if (!empresaMonitoreoActual) { $("routerError").textContent = "Selecciona una empresa arriba."; return; }
+
+  const host = $("routerHost").value.trim();
+  const usuario = $("routerUsuario").value.trim();
+  const password = $("routerPassword").value;
+
+  if (!host) { $("routerError").textContent = "Escribe la IP o dominio del router."; return; }
+  if (!usuario) { $("routerError").textContent = "Escribe el usuario del router."; return; }
+  if (!routerEditandoId && !password) { $("routerError").textContent = "Escribe la contraseña del router."; return; }
+
+  const cuerpo = {
+    accion: "guardar",
+    id: routerEditandoId || undefined,
+    empresa_id: empresaMonitoreoActual,
+    nombre: $("routerNombre").value.trim() || "Router principal",
+    host,
+    puerto: $("routerPuerto").value.trim() || "8728",
+    usuario,
+    password,
+    ssl: $("routerSsl").checked,
+    wan_interface: $("routerWan").value.trim() || "ether1",
+    lan_interface: $("routerLan").value.trim() || "bridge",
+  };
+
+  $("btnGuardarRouter").disabled = true;
+  const { data, error } = await sb.functions.invoke("mikrotik-config", { body: cuerpo });
+  $("btnGuardarRouter").disabled = false;
+
+  if (error || data?.error) {
+    $("routerError").textContent = "Error: " + (data?.error || error.message);
+    return;
+  }
+
+  toast(routerEditandoId ? "Router actualizado." : "Router guardado.");
+  cancelarEdicionRouter();
+  await cargarRoutersConfigurados();
+});
+
+$("btnCancelarEdicionRouter").addEventListener("click", cancelarEdicionRouter);
+
+function cancelarEdicionRouter() {
+  routerEditandoId = null;
+  $("routerNombre").value = "Router principal";
+  $("routerHost").value = "";
+  $("routerPuerto").value = "8728";
+  $("routerUsuario").value = "";
+  $("routerPassword").value = "";
+  $("routerPassword").placeholder = "Contraseña del router";
+  $("routerSsl").checked = false;
+  $("routerWan").value = "ether1";
+  $("routerLan").value = "bridge";
+  $("routerFormTitulo").textContent = "Agregar router";
+  $("btnGuardarRouter").textContent = "Guardar router";
+  $("btnCancelarEdicionRouter").style.display = "none";
+  $("routerError").textContent = "";
+}
+
+async function cargarRoutersConfigurados() {
+  const tbody = $("tablaRouters");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const { data, error } = await sb.functions.invoke("mikrotik-config", {
+    body: { accion: "listar", empresa_id: empresaMonitoreoActual },
+  });
+
+  if (error || data?.error) { toast("Error al cargar routers: " + (data?.error || error.message), true); return; }
+
+  const routers = data.routers || [];
+  $("routersEmpty").style.display = routers.length ? "none" : "block";
+
+  routers.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.nombre)}</td>
+      <td>${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}</td>
+      <td>${escapeHtml(r.wan_interface)} / ${escapeHtml(r.lan_interface)}</td>
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-router="${r.id}">Editar</button>
+        <button class="icon-btn danger" data-borrar-router="${r.id}">Eliminar</button>
+      </td>`;
+    tbody.appendChild(tr);
+    tr.dataset.routerJson = JSON.stringify(r);
+  });
+
+  tbody.querySelectorAll("[data-editar-router]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const r = JSON.parse(b.closest("tr").dataset.routerJson);
+      routerEditandoId = r.id;
+      $("routerNombre").value = r.nombre || "";
+      $("routerHost").value = r.host || "";
+      $("routerPuerto").value = r.puerto || 8728;
+      $("routerUsuario").value = r.usuario || "";
+      $("routerPassword").value = "";
+      $("routerPassword").placeholder = "Deja en blanco para no cambiarla";
+      $("routerSsl").checked = !!r.ssl;
+      $("routerWan").value = r.wan_interface || "ether1";
+      $("routerLan").value = r.lan_interface || "bridge";
+      $("routerFormTitulo").textContent = "Editar router";
+      $("btnGuardarRouter").textContent = "Guardar cambios";
+      $("btnCancelarEdicionRouter").style.display = "inline-block";
+      $("routerError").textContent = "";
+    });
+  });
+
+  tbody.querySelectorAll("[data-borrar-router]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("¿Eliminar este router?")) return;
+      const { data: delData, error: delError } = await sb.functions.invoke("mikrotik-config", {
+        body: { accion: "eliminar", id: b.dataset.borrarRouter },
+      });
+      if (delError || delData?.error) { toast("Error al eliminar: " + (delData?.error || delError.message), true); return; }
+      toast("Router eliminado.");
+      cancelarEdicionRouter();
+      await cargarRoutersConfigurados();
+    });
+  });
+}
 
 // ------------------------------------------------------------
 // Equipo (solo admin): crear, editar y eliminar colaboradores sin

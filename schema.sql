@@ -162,3 +162,29 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ------------------------------------------------------------
+-- Monitoreo MikroTik: routers por empresa, para ver el estado de
+-- WAN/LAN en tiempo real desde la pestaña "Monitoreo".
+--
+-- A propósito esta tabla NO tiene ninguna política de seguridad
+-- (RLS activado pero sin policies): así nadie puede leer ni escribir
+-- aquí directo desde el navegador, ni siquiera el admin con su sesión
+-- normal — incluida la contraseña del router. Solo las Edge Functions
+-- (que usan la llave secreta "service_role") pueden tocar esta tabla.
+-- ------------------------------------------------------------
+create table if not exists mikrotik_routers (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  nombre text not null default 'Router principal',
+  host text not null,
+  puerto integer not null default 8728,
+  usuario text not null,
+  password text not null,
+  ssl boolean not null default false,
+  wan_interface text not null default 'ether1',
+  lan_interface text not null default 'bridge',
+  created_at timestamptz default now()
+);
+
+alter table mikrotik_routers enable row level security;
