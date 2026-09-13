@@ -484,7 +484,12 @@ async function consultarRouter(r: Record<string, any>, detalle = true) {
       diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `No se encontró la interfaz WAN configurada ("${r.wan_interface}").` });
     } else if (!(wanMedida as any)?.activa) {
       diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `La interfaz WAN (${wanIf.name}) está caída.` });
-    } else if (!wanIp) {
+    } else if (detalle && !wanIp) {
+      // Ojo: en modo liviano (detalle=false, usado por el Dashboard
+      // general) ni siquiera se consulta la IP de la WAN por velocidad,
+      // así que wanIp siempre da null ahí — sin este "detalle &&" se
+      // marcaba esto como advertencia en TODOS los routers del dashboard
+      // aunque su WAN sí tuviera IP y funcionara perfecto.
       diagnostico.push({ nivel: "advertencia", fuente: "estado", mensaje: `La interfaz WAN (${wanIf.name}) no tiene IP asignada.` });
     }
     if (!lanIf) {
