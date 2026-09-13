@@ -577,10 +577,31 @@ $("monEmpresaSelect").addEventListener("change", async (e) => {
   $("monMensaje").textContent = empresaMonitoreoActual ? "Da clic en \"Verificar ahora\" para ver el estado." : "Selecciona una empresa arriba.";
 
   if (perfil.rol === "admin") {
-    $("monConfigCard").style.display = empresaMonitoreoActual ? "block" : "none";
+    // El panel de "agregar/editar router" arranca siempre colapsado: por
+    // defecto solo interesa VER el estado, y este formulario+tabla ocupa
+    // mucho espacio cuando se está revisando router por router.
+    $("btnToggleConfigRouter").style.display = empresaMonitoreoActual ? "inline-flex" : "none";
+    cerrarConfigRouter();
     cancelarEdicionRouter();
     if (empresaMonitoreoActual) await cargarRoutersConfigurados();
   }
+});
+
+function cerrarConfigRouter() {
+  $("monConfigCard").style.display = "none";
+  $("btnToggleConfigRouter").classList.remove("abierto");
+  $("btnToggleConfigRouterTexto").textContent = "Agregar / configurar router";
+}
+
+function abrirConfigRouter() {
+  $("monConfigCard").style.display = "block";
+  $("btnToggleConfigRouter").classList.add("abierto");
+  $("btnToggleConfigRouterTexto").textContent = "Ocultar configuración de routers";
+}
+
+$("btnToggleConfigRouter").addEventListener("click", () => {
+  if ($("monConfigCard").style.display === "block") cerrarConfigRouter();
+  else abrirConfigRouter();
 });
 
 $("btnVerificarMonitoreo").addEventListener("click", async () => {
@@ -908,6 +929,7 @@ async function cargarRoutersConfigurados() {
       $("btnGuardarRouter").textContent = "Guardar cambios";
       $("btnCancelarEdicionRouter").style.display = "inline-block";
       $("routerError").textContent = "";
+      abrirConfigRouter();
     });
   });
 

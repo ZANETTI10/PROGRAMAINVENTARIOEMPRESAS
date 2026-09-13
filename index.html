@@ -433,7 +433,7 @@ tbody tr:last-child td { border-bottom: none; }
 .mon-if-name { color: var(--text-faint); font-size: 0.76rem; font-family: var(--font-mono); }
 .mon-speed { color: var(--text-dim); font-size: 0.78rem; font-family: var(--font-mono); }
 
-/* -------- Monitoreo: panel de estado del router (rediseno) -------- */
+/* -------- Monitoreo: panel de estado del router (rediseño) -------- */
 .mon-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin: 4px 0 20px; }
 .mon-stat-tile { background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px 10px 12px; display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; }
 .mon-stat-tile .cpu-ring { width: 42px; height: 42px; }
@@ -788,6 +788,10 @@ tbody tr:last-child td { border-bottom: none; }
 
       <p class="empty-state" id="monMensaje" style="padding:14px 0; text-align:left;">Selecciona una empresa arriba.</p>
       <div id="monResultado"></div>
+
+      <button class="mon-toggle" id="btnToggleConfigRouter" type="button" style="display:none;">
+        <span class="chev">▾</span> <span id="btnToggleConfigRouterTexto">Agregar / configurar router</span>
+      </button>
 
       <div class="card" id="monConfigCard" style="display:none;">
         <h3 id="routerFormTitulo">Agregar router</h3>
