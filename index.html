@@ -433,6 +433,39 @@ tbody tr:last-child td { border-bottom: none; }
 .mon-if-name { color: var(--text-faint); font-size: 0.76rem; font-family: var(--font-mono); }
 .mon-speed { color: var(--text-dim); font-size: 0.78rem; font-family: var(--font-mono); }
 
+/* -------- Monitoreo: panel de estado del router (rediseno) -------- */
+.mon-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin: 4px 0 20px; }
+.mon-stat-tile { background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px 10px 12px; display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; }
+.mon-stat-tile .cpu-ring { width: 42px; height: 42px; }
+.mon-stat-tile .cpu-ring-val { font-size: 0.68rem; }
+.mon-stat-val { font-family: var(--font-mono); font-size: 0.92rem; font-weight: 700; color: var(--text); line-height: 1.25; }
+.mon-stat-label { font-size: 0.64rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.mon-conn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 0 0 20px; }
+.mon-conn-card { position: relative; background: var(--bg-soft); border: 1px solid var(--border-soft); border-left: 3px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.mon-conn-card.mon-conn-ok { border-left-color: var(--ok); }
+.mon-conn-card.mon-conn-bad { border-left-color: var(--danger); }
+.mon-conn-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.mon-conn-title { font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 7px; }
+.mon-conn-if { color: var(--text-faint); font-size: 0.7rem; font-family: var(--font-mono); font-weight: 400; }
+.mon-conn-ip { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-dim); margin: 2px 0 6px; }
+.mon-conn-speed { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-faint); }
+
+.mon-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 4px; }
+
+.mon-toggle {
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  padding: 7px 14px; border-radius: 8px; font-size: 0.76rem; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-family: var(--font-body);
+}
+.mon-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.mon-toggle .chev { transition: transform 0.15s ease; }
+.mon-toggle.abierto .chev { transform: rotate(180deg); }
+.mon-interfaces-list { display: none; margin-top: 8px; }
+.mon-interfaces-list.abierto { display: block; }
+.mon-if-group-label { font-size: 0.66rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 2px; }
+.mon-if-group-label:first-child { margin-top: 4px; }
+
 .pw-cell { font-family: var(--font-mono); font-size: 0.8rem; }
 .reveal-btn {
   background: transparent; border: none; color: var(--accent);

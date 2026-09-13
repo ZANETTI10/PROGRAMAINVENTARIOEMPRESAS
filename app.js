@@ -627,18 +627,62 @@ function formatBytes(bytes) {
   return mb.toFixed(0) + " MB";
 }
 
-function pintarInterfaz(titulo, info) {
-  if (!info) return `<div class="mon-row"><span>${titulo}</span><span class="pill pill-bad">No configurada</span></div>`;
-  if (info.error) return `<div class="mon-row"><span>${titulo}</span><span class="pill pill-bad">${escapeHtml(info.error)}</span></div>`;
+// Tarjeta de conexión (WAN/LAN) para el panel de Monitoreo — reemplaza
+// la fila plana de antes por algo que se lee de un vistazo: pill grande
+// de estado, IP y velocidad agrupadas en su propia tarjetita.
+function pintarConexion(titulo, icono, info) {
+  if (!info) {
+    return `
+      <div class="mon-conn-card mon-conn-bad">
+        <div class="mon-conn-top"><span class="mon-conn-title">${icono} ${titulo}</span><span class="pill pill-bad">No configurada</span></div>
+      </div>`;
+  }
+  if (info.error) {
+    return `
+      <div class="mon-conn-card mon-conn-bad">
+        <div class="mon-conn-top"><span class="mon-conn-title">${icono} ${titulo}</span><span class="pill pill-bad">Error</span></div>
+        <div class="mon-conn-ip">${escapeHtml(info.error)}</div>
+      </div>`;
+  }
   const activa = info.activa && !info.deshabilitada;
   const estado = info.deshabilitada ? "Deshabilitada" : (activa ? "Activa" : "Caída");
-  const ip = info.ip ? ` <span class="mon-if-name">· ${escapeHtml(info.ip)}</span>` : "";
   return `
-    <div class="mon-row">
-      <span>${titulo} <span class="mon-if-name">(${escapeHtml(info.interfaz)})</span>${ip}</span>
-      <span class="pill ${activa ? "pill-ok" : "pill-bad"}">${estado}</span>
-      <span class="mon-speed">↓ ${formatBps(info.rx_bps)} · ↑ ${formatBps(info.tx_bps)}</span>
+    <div class="mon-conn-card ${activa ? "mon-conn-ok" : "mon-conn-bad"}">
+      <div class="mon-conn-top">
+        <span class="mon-conn-title">${icono} ${titulo} <span class="mon-conn-if">(${escapeHtml(info.interfaz)})</span></span>
+        <span class="pill ${activa ? "pill-ok" : "pill-bad"}">${estado}</span>
+      </div>
+      ${info.ip ? `<div class="mon-conn-ip">${escapeHtml(info.ip)}</div>` : ""}
+      <div class="mon-conn-speed">↓ ${formatBps(info.rx_bps)} · ↑ ${formatBps(info.tx_bps)}</div>
     </div>`;
+}
+
+const NOMBRES_TIPO_INTERFAZ = {
+  ether: "Ethernet", wlan: "WiFi", vlan: "VLANs", bridge: "Bridges",
+  "pppoe-out": "PPPoE", "l2tp-in": "VPN (L2TP)", "l2tp-out": "VPN (L2TP)",
+  "pptp-in": "VPN (PPTP)", "sstp-in": "VPN (SSTP)", "ovpn-in": "VPN (OpenVPN)",
+  loopback: "Loopback",
+};
+
+// Agrupa "todas las interfaces" por tipo en vez de un listado plano
+// larguísimo — así de un vistazo se ve qué hay (ethernet, wifi, VPNs,
+// VLANs...) sin tener que leer 20 filas iguales una por una.
+function pintarInterfacesAgrupadas(interfaces) {
+  const grupos = new Map();
+  for (const i of interfaces) {
+    const clave = i.tipo || "otro";
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(i);
+  }
+  const orden = ["ether", "wlan", "bridge", "vlan", "pppoe-out", "l2tp-in", "l2tp-out", "pptp-in", "sstp-in", "ovpn-in", "loopback"];
+  const claves = [...grupos.keys()].sort((a, b) => {
+    const ia = orden.indexOf(a), ib = orden.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  return claves.map((clave) => {
+    const titulo = NOMBRES_TIPO_INTERFAZ[clave] || (clave.charAt(0).toUpperCase() + clave.slice(1));
+    return `<div class="mon-if-group-label">${escapeHtml(titulo)} (${grupos.get(clave).length})</div>${grupos.get(clave).map(pintarInterfazFila).join("")}`;
+  }).join("");
 }
 
 function pintarInterfazFila(i) {
@@ -685,6 +729,8 @@ function pintarDiagnostico(diagnostico) {
   return seccionActivos + seccionLog;
 }
 
+let monToggleSeq = 0;
+
 function pintarRouterEstado(r) {
   if (!r.conectado) {
     return `
@@ -693,33 +739,68 @@ function pintarRouterEstado(r) {
         <div class="error-msg" style="margin-top:0;">${escapeHtml(r.error || "No se pudo conectar al router.")}</div>
       </div>`;
   }
-  const dispositivos = r.dispositivos_conectados >= 0 ? r.dispositivos_conectados : "No disponible";
-  const sis = r.sistema;
-  const infoSistema = sis ? `
-    <div class="mon-row"><span>Equipo</span><span>${escapeHtml(sis.modelo || "—")} · RouterOS ${escapeHtml(sis.version || "—")}</span></div>
-    <div class="mon-row"><span>Encendido hace</span><span>${escapeHtml(sis.uptime || "—")}</span></div>
-    <div class="mon-row"><span>CPU / RAM libre</span><span>${sis.cpu_carga ?? "—"}% · ${formatBytes(sis.memoria_libre)} de ${formatBytes(sis.memoria_total)}</span></div>
-  ` : "";
+  const dispositivos = r.dispositivos_conectados >= 0 ? r.dispositivos_conectados : "—";
+  const sis = r.sistema || {};
   const salud = r.salud || {};
-  const infoSalud = (salud.temperature || salud.voltage) ? `
-    <div class="mon-row"><span>Temperatura / Voltaje</span><span>${salud.temperature ? salud.temperature + " °C" : "—"} · ${salud.voltage ? salud.voltage + " V" : "—"}</span></div>
-  ` : "";
-  const interfacesLista = (r.interfaces || []).map(pintarInterfazFila).join("");
+
+  const cpu = sis.cpu_carga;
+  const ramLibre = sis.memoria_libre, ramTotal = sis.memoria_total;
+  const ramPct = (ramLibre != null && ramTotal) ? Math.round(100 - (ramLibre / ramTotal) * 100) : null;
+  const cpuColor = cpu == null ? "var(--accent)" : (cpu >= 80 ? "var(--danger)" : cpu >= 50 ? "var(--warn)" : "var(--accent)");
+  const ramColor = ramPct == null ? "var(--accent)" : (ramPct >= 85 ? "var(--danger)" : ramPct >= 60 ? "var(--warn)" : "var(--accent)");
+
+  const tiles = [];
+  tiles.push(`<div class="mon-stat-tile"><div class="mon-stat-val">${escapeHtml(sis.modelo || "—")}</div><div class="mon-stat-label">RouterOS ${escapeHtml(sis.version || "—")}</div></div>`);
+  tiles.push(`<div class="mon-stat-tile"><div class="mon-stat-val">${escapeHtml(sis.uptime || "—")}</div><div class="mon-stat-label">Encendido hace</div></div>`);
+  if (cpu != null) {
+    tiles.push(`<div class="mon-stat-tile"><span class="cpu-ring" style="--pct:${cpu};--ring-color:${cpuColor}"><span class="cpu-ring-val">${cpu}%</span></span><div class="mon-stat-label">CPU</div></div>`);
+  }
+  if (ramPct != null) {
+    tiles.push(`<div class="mon-stat-tile"><span class="cpu-ring" style="--pct:${ramPct};--ring-color:${ramColor}"><span class="cpu-ring-val">${ramPct}%</span></span><div class="mon-stat-label">RAM (${formatBytes(ramTotal)})</div></div>`);
+  }
+  if (salud.temperature) tiles.push(`<div class="mon-stat-tile"><div class="mon-stat-val">${escapeHtml(salud.temperature)} °C</div><div class="mon-stat-label">Temperatura</div></div>`);
+  if (salud.voltage) tiles.push(`<div class="mon-stat-tile"><div class="mon-stat-val">${escapeHtml(salud.voltage)} V</div><div class="mon-stat-label">Voltaje</div></div>`);
+  tiles.push(`<div class="mon-stat-tile"><div class="mon-stat-val">${dispositivos}</div><div class="mon-stat-label">Dispositivos (DHCP)</div></div>`);
+
   const diagnosticoHtml = pintarDiagnostico(r.diagnostico);
+
+  const interfaces = r.interfaces || [];
+  const toggleId = `monIfToggle${monToggleSeq++}`;
 
   return `
     <div class="card mon-card">
-      <h3>${escapeHtml(r.nombre)}${r.identidad ? ` <span class="mon-if-name">(${escapeHtml(r.identidad)})</span>` : ""} <span class="pill pill-ok">En línea</span></h3>
-      ${infoSistema}
-      ${infoSalud}
-      ${pintarInterfaz("WAN", r.wan)}
-      ${pintarInterfaz("LAN", r.lan)}
-      <div class="mon-row"><span>Dispositivos conectados (DHCP)</span><span class="pill">${dispositivos}</span></div>
+      <h3>${escapeHtml(r.nombre)}${r.identidad ? ` <span class="mon-if-name">(${escapeHtml(r.identidad)})</span>` : ""} <span class="pill pill-ok">● En línea</span></h3>
+
+      <div class="mon-stats-grid">${tiles.join("")}</div>
+
+      <div class="mon-conn-grid">
+        ${pintarConexion("WAN", "🌐", r.wan)}
+        ${pintarConexion("LAN", "🏠", r.lan)}
+      </div>
+
       ${diagnosticoHtml}
-      <div class="stat-label" style="margin:18px 0 4px;">Todas las interfaces</div>
-      ${interfacesLista}
+
+      <button class="mon-toggle" data-toggle-interfaces="${toggleId}" type="button">
+        <span class="chev">▾</span> Ver todas las interfaces (${interfaces.length})
+      </button>
+      <div class="mon-interfaces-list" id="${toggleId}">
+        ${pintarInterfacesAgrupadas(interfaces)}
+      </div>
     </div>`;
 }
+
+// Delegación de eventos: como las tarjetas de router se regeneran cada
+// vez que se "Verifica ahora", el botón de "ver todas las interfaces"
+// se engancha una sola vez aquí arriba, sobre el contenedor fijo.
+$("monResultado").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-toggle-interfaces]");
+  if (!btn) return;
+  const lista = document.getElementById(btn.dataset.toggleInterfaces);
+  if (!lista) return;
+  const abierto = lista.classList.toggle("abierto");
+  btn.classList.toggle("abierto", abierto);
+  btn.innerHTML = `<span class="chev">▾</span> ${abierto ? "Ocultar" : "Ver"} todas las interfaces (${lista.querySelectorAll(".mon-row").length})`;
+});
 
 // ---- Configurar routers MikroTik (solo admin) ----
 
