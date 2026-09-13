@@ -152,16 +152,49 @@ async function cargarDashboard() {
     $("dashMensaje").style.display = "block";
     $("dashMensaje").textContent = "Todavía no hay empresas registradas.";
     $("dashGrid").innerHTML = "";
+    $("dashResumen").style.display = "none";
     return;
   }
 
+  $("dashResumen").style.display = "grid";
+  $("dashResumen").innerHTML = pintarResumenDashboard(items);
+
   $("dashGrid").innerHTML = items.map(pintarDashCard).join("");
   $("dashActualizado").style.display = "inline";
-  $("dashActualizado").textContent = "Actualizado a las " + new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  $("dashActualizado").innerHTML = '<span class="dash-live-dot"></span>Actualizado a las ' + new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 
   $("dashGrid").querySelectorAll("[data-dash-empresa]").forEach((el) => {
     el.addEventListener("click", () => irAMonitoreoDesdeDashboard(el.dataset.dashEmpresa));
   });
+}
+
+// Franja de resumen arriba del grid: cuenta cuántas empresas están bien,
+// cuántas tienen advertencias, cuántas necesitan atención y cuántas no
+// tienen router — para que de un vistazo, antes de leer tarjeta por
+// tarjeta, ya se sepa qué tan grave está la cosa en general.
+function pintarResumenDashboard(items) {
+  let ok = 0, advertencia = 0, alerta = 0, sinRouter = 0;
+  items.forEach((item) => {
+    const routers = item.routers || [];
+    if (routers.length === 0) { sinRouter++; return; }
+    let a = 0, adv = 0, fuera = 0;
+    routers.forEach((r) => {
+      if (!r || !r.conectado) { fuera++; return; }
+      (r.diagnostico || []).forEach((d) => {
+        if (d.fuente === "registro") return;
+        if (d.nivel === "alerta") a++; else adv++;
+      });
+    });
+    if (fuera > 0 || a > 0) alerta++;
+    else if (adv > 0) advertencia++;
+    else ok++;
+  });
+
+  return `
+    <div class="dash-resumen-item dr-ok"><div class="dr-icon">✓</div><span class="dr-num">${ok}</span><span class="dr-label">Sin problemas</span></div>
+    <div class="dash-resumen-item dr-warn"><div class="dr-icon">⚠️</div><span class="dr-num">${advertencia}</span><span class="dr-label">Con advertencias</span></div>
+    <div class="dash-resumen-item dr-bad"><div class="dr-icon">⛔</div><span class="dr-num">${alerta}</span><span class="dr-label">Necesitan atención</span></div>
+    <div class="dash-resumen-item dr-muted"><div class="dr-icon">○</div><span class="dr-num">${sinRouter}</span><span class="dr-label">Sin router</span></div>`;
 }
 
 function pintarDashCard(item) {
@@ -204,10 +237,43 @@ function pintarDashCard(item) {
   if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ Sin problemas activos</span>`);
   if (eventosLog > 0) badges.push(`<span class="pill" title="Líneas del log del router, pueden ser de hace días">📋 ${eventosLog} en el log</span>`);
 
+  // Fila por router: punto verde/rojo + nombre + mini-stats (CPU/RAM/temp)
+  // cuando está conectado, para ver salud del equipo sin entrar a Monitoreo.
+  const routerRows = routers.map((r) => {
+    if (!r || !r.conectado) {
+      return `
+        <div class="dash-router-row">
+          <span class="dash-router-dot dot-off"></span>
+          <span class="dash-router-name">${escapeHtml(r?.nombre || "Router")}</span>
+          <span class="dash-router-info">Sin conexión</span>
+        </div>`;
+    }
+    const cpu = r.sistema?.cpu_carga;
+    const ramLibre = r.sistema?.memoria_libre, ramTotal = r.sistema?.memoria_total;
+    const ramPct = (ramLibre != null && ramTotal) ? Math.round(100 - (ramLibre / ramTotal) * 100) : null;
+    const temp = r.salud?.temperature;
+    const stats = [];
+    if (ramPct != null) stats.push(`RAM ${ramPct}%`);
+    if (temp) stats.push(`${temp}°C`);
+    // Aro tipo "gauge" para el CPU — más rápido de leer de un vistazo que
+    // un número suelto, y le da ese aire de panel de control.
+    const cpuRing = (cpu != null)
+      ? `<span class="cpu-ring" style="--pct:${cpu};--ring-color:${cpu >= 80 ? "var(--danger)" : cpu >= 50 ? "var(--warn)" : "var(--accent)"}"><span class="cpu-ring-val">${cpu}</span></span>`
+      : "";
+    return `
+      <div class="dash-router-row">
+        <span class="dash-router-dot dot-on"></span>
+        <span class="dash-router-name">${escapeHtml(r.identidad || r.nombre || "Router")}</span>
+        <span class="dash-router-info">${stats.join(" · ") || "En línea"}</span>
+        ${cpuRing}
+      </div>`;
+  }).join("");
+
   return `
     <div class="dash-card dash-${nivel}" data-dash-empresa="${item.empresa_id}">
       <div class="dash-card-top"><h4>${escapeHtml(item.empresa_nombre)}</h4><span class="pill ${estadoClase}">${estadoTxt}</span></div>
       <div class="dash-card-sub">${routers.length} router${routers.length > 1 ? "es" : ""} configurado${routers.length > 1 ? "s" : ""}</div>
+      <div class="dash-routers">${routerRows}</div>
       <div class="dash-badges">${badges.join("")}</div>
     </div>`;
 }

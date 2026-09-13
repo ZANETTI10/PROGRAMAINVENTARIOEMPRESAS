@@ -18,6 +18,7 @@
   --bg-2: #0b1120;
   --bg-soft: #101a30;
   --card: #121d36;
+  --card-hover: #17223f;
   --border: #223050;
   --border-soft: #1a2540;
   --text: #eef1fb;
@@ -318,29 +319,113 @@ tbody tr:last-child td { border-bottom: none; }
 .diag-msg { color: var(--text); }
 .diag-ok { color: var(--ok); font-size: 0.85rem; padding: 6px 0; }
 
+/* -------- Dashboard: resumen general -------- */
+.dash-resumen {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.dash-resumen-item {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--card) 0%, var(--bg-2) 130%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dash-resumen-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+}
+.dr-ok::before { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.dr-warn::before { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+.dr-bad::before { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+.dr-muted::before { background: var(--text-faint); }
+.dr-icon { font-size: 1.05rem; margin-bottom: 6px; opacity: 0.9; }
+.dr-num { font-family: var(--font-mono); font-size: 2rem; font-weight: 700; line-height: 1; color: var(--text); }
+.dr-ok .dr-num { text-shadow: 0 0 18px rgba(52, 211, 153, 0.45); }
+.dr-warn .dr-num { text-shadow: 0 0 18px rgba(251, 191, 36, 0.4); }
+.dr-bad .dr-num { text-shadow: 0 0 18px rgba(251, 113, 133, 0.45); }
+.dr-label { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
+
+.dash-live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; box-shadow: 0 0 6px var(--ok); animation: dash-pulse 2.4s ease-in-out infinite; vertical-align: middle; }
+
+/* -------- Dashboard: tarjetas por empresa -------- */
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
 }
 .dash-card {
-  background: var(--card);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 40%),
+    var(--card);
   border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 20px;
+  padding: 20px 22px 18px;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.06s;
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-.dash-card:hover { border-color: var(--accent); }
-.dash-card:active { transform: translateY(1px); }
-.dash-card.dash-alerta { border-left: 3px solid var(--danger); }
-.dash-card.dash-advertencia { border-left: 3px solid var(--warn); }
-.dash-card.dash-ok { border-left: 3px solid var(--ok); }
-.dash-card.dash-sin-router { border-left: 3px solid var(--border); opacity: 0.7; }
-.dash-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.dash-card::before, .dash-card::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.dash-card::before { top: 7px; left: 7px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+.dash-card::after { bottom: 7px; right: 7px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.dash-card:hover { border-color: var(--accent); background: var(--card-hover); transform: translateY(-2px); box-shadow: 0 14px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(34,211,238,0.12); }
+.dash-card:hover::before, .dash-card:hover::after { opacity: 1; }
+.dash-card:active { transform: translateY(0px); }
+.dash-card.dash-alerta { border-top-color: var(--danger); box-shadow: 0 0 0 1px rgba(251,113,133,0.1), 0 0 22px -6px rgba(251,113,133,0.35); }
+.dash-card.dash-alerta::before, .dash-card.dash-alerta::after { border-color: var(--danger); opacity: 0.65; }
+.dash-card.dash-advertencia { border-top-color: var(--warn); }
+.dash-card.dash-advertencia::before, .dash-card.dash-advertencia::after { border-color: var(--warn); opacity: 0.55; }
+.dash-card.dash-ok { border-top-color: var(--ok); }
+.dash-card.dash-ok::before, .dash-card.dash-ok::after { border-color: var(--ok); }
+.dash-card.dash-sin-router { border-top-color: var(--border); opacity: 0.72; cursor: default; }
+.dash-card.dash-sin-router::before, .dash-card.dash-sin-router::after { border-color: var(--text-faint); }
+.dash-card.dash-sin-router:hover { transform: none; box-shadow: none; background: var(--card); border-color: var(--border); }
+.dash-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .dash-card-top h4 { margin: 0; font-size: 0.95rem; font-weight: 700; }
-.dash-card-sub { color: var(--text-faint); font-size: 0.76rem; margin-bottom: 4px; }
-.dash-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.dash-card-sub { color: var(--text-faint); font-size: 0.68rem; margin-bottom: 4px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.dash-routers { display: flex; flex-direction: column; gap: 9px; margin: 12px 0 14px; }
+.dash-router-row { display: flex; align-items: center; gap: 9px; font-size: 0.78rem; }
+.dash-router-dot { width: 7px; height: 7px; min-width: 7px; border-radius: 50%; }
+.dash-router-dot.dot-on { background: var(--ok); box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16), 0 0 8px rgba(52, 211, 153, 0.6); animation: dash-pulse 2.4s ease-in-out infinite; }
+.dash-router-dot.dot-off { background: var(--danger); box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.16); }
+@keyframes dash-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.dash-router-name { color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-router-info { color: var(--text-faint); font-size: 0.72rem; margin-left: auto; text-align: right; white-space: nowrap; font-family: var(--font-mono); letter-spacing: 0.01em; }
+
+.cpu-ring {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ring-color, var(--accent)) calc(var(--pct, 0) * 1%), var(--border-soft) 0);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cpu-ring::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--card); }
+.cpu-ring-val { position: relative; z-index: 1; font-size: 0.56rem; font-family: var(--font-mono); color: var(--text-dim); font-weight: 600; }
+
+.dash-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
 .mon-card h3 { display: flex; align-items: center; gap: 10px; }
 .mon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); font-size: 0.85rem; flex-wrap: wrap; }
@@ -385,6 +470,9 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 720px) {
   .login-shell { flex-direction: column; max-width: 420px; }
   .login-side { padding: 32px 30px; }
+}
+@media (max-width: 640px) {
+  .dash-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>
 </head>
@@ -479,6 +567,8 @@ tbody tr:last-child td { border-bottom: none; }
         <button class="btn-primary" style="width:auto; margin-top:0;" id="btnActualizarDashboard">Actualizar estado</button>
         <span class="empty-state" id="dashActualizado" style="padding:0; display:none;"></span>
       </div>
+
+      <div class="dash-resumen" id="dashResumen" style="display:none;"></div>
 
       <p class="empty-state" id="dashMensaje" style="padding:14px 0; text-align:left;">Da clic en "Actualizar estado" para consultar todos los routers.</p>
       <div class="dash-grid" id="dashGrid"></div>
