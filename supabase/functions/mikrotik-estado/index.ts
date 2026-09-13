@@ -99,10 +99,21 @@ class MikrotikApi {
     return out;
   }
 
-  private async asegurarBytes(n: number) {
+  // Ojo: sin límite de tiempo aquí, si el puerto está abierto pero del
+  // otro lado no habla el protocolo de la API (puerto equivocado, por
+  // ejemplo el de WinBox) esta lectura se queda colgada para siempre —
+  // eso frenaba TODO el dashboard, porque Promise.all espera a que
+  // cada router termine. Por eso cada lectura tiene su propio tiempo
+  // límite, aparte del de conectar() y del de comando().
+  private async asegurarBytes(n: number, timeoutMs = 8000) {
     while (this.buffer.length < n) {
       const chunk = new Uint8Array(4096);
-      const leidos = await this.conn.read(chunk);
+      const leidos = await Promise.race([
+        this.conn.read(chunk),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("El router dejó de responder (puerto o protocolo incorrecto, probablemente).")), timeoutMs)
+        ),
+      ]);
       if (leidos === null) throw new Error("El router cerró la conexión inesperadamente.");
       this.buffer = this.concat(this.buffer, chunk.slice(0, leidos));
     }
@@ -245,7 +256,7 @@ Deno.serve(async (req) => {
       // sí es seguro consultarlos todos en paralelo entre sí (lo que no
       // se puede paralelizar son varios comandos DENTRO de un mismo
       // router, eso sigue siendo secuencial dentro de consultarRouter).
-      const resultados = await Promise.all(routersLista.map((r) => consultarRouter(r, false)));
+      const resultados = await Promise.all(routersLista.map((r) => consultarRouterConLimite(r, false)));
       const resultadoPorRouterId = new Map(routersLista.map((r, idx) => [r.id, resultados[idx]]));
 
       const empresasConEstado = (empresasList || []).map((emp) => {
@@ -272,12 +283,25 @@ Deno.serve(async (req) => {
     if (routersError) return json({ error: routersError.message }, 400);
     if (!routers || routers.length === 0) return json({ routers: [] });
 
-    const resultados = await Promise.all(routers.map((r) => consultarRouter(r, true)));
+    const resultados = await Promise.all(routers.map((r) => consultarRouterConLimite(r, true)));
     return json({ routers: resultados });
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);
   }
 });
+
+// Red de seguridad extra, encima de los tiempos límite de conectar() y
+// de cada lectura: pase lo que pase adentro, un router nunca puede
+// demorar más de esto — así uno solo con problemas nunca frena el resto
+// del dashboard ni deja la consulta de una empresa esperando para siempre.
+async function consultarRouterConLimite(r: Record<string, any>, detalle: boolean, limiteMs = 20000) {
+  return Promise.race([
+    consultarRouter(r, detalle),
+    new Promise<Record<string, unknown>>((resolve) =>
+      setTimeout(() => resolve({ id: r.id, nombre: r.nombre, conectado: false, error: "El router no respondió a tiempo (más de 20s)." }), limiteMs)
+    ),
+  ]);
+}
 
 // El parámetro "detalle" controla si se mide el tráfico (rx/tx) de cada
 // interfaz una por una (varios comandos extra por router) o si solo se
@@ -436,41 +460,48 @@ async function consultarRouter(r: Record<string, any>, detalle = true) {
     }
 
     // ---- Diagnóstico automático: reglas simples para detectar fallas comunes ----
-    const diagnostico: { nivel: "alerta" | "advertencia"; mensaje: string }[] = [];
+    // Cada hallazgo lleva "fuente": "estado" son cosas que están pasando
+    // AHORA MISMO (se vuelven a revisar en cada consulta), y "registro"
+    // son líneas del log del router — pueden ser de hace días y ya
+    // haberse resuelto solas. Separar esto es lo que hace el diagnóstico
+    // más objetivo: no es lo mismo "la WAN está caída ahora" que "hubo
+    // un error hace 3 días en el log".
+    const diagnostico: { nivel: "alerta" | "advertencia"; mensaje: string; fuente: "estado" | "registro" }[] = [];
 
     if (sistema?.cpu_carga != null && (sistema.cpu_carga as number) >= 80) {
-      diagnostico.push({ nivel: "alerta", mensaje: `CPU muy alta: ${sistema.cpu_carga}%.` });
+      diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `CPU muy alta: ${sistema.cpu_carga}%.` });
     }
     if (sistema?.memoria_libre != null && sistema?.memoria_total) {
       const pctLibre = (sistema.memoria_libre as number) / (sistema.memoria_total as number);
       if (pctLibre < 0.15) {
-        diagnostico.push({ nivel: "alerta", mensaje: `Memoria RAM casi agotada: ${(pctLibre * 100).toFixed(0)}% libre.` });
+        diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `Memoria RAM casi agotada: ${(pctLibre * 100).toFixed(0)}% libre.` });
       }
     }
     if (salud?.temperature && parseFloat(salud.temperature) >= 65) {
-      diagnostico.push({ nivel: "alerta", mensaje: `Temperatura alta: ${salud.temperature} °C.` });
+      diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `Temperatura alta: ${salud.temperature} °C.` });
     }
     if (!wanIf) {
-      diagnostico.push({ nivel: "alerta", mensaje: `No se encontró la interfaz WAN configurada ("${r.wan_interface}").` });
+      diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `No se encontró la interfaz WAN configurada ("${r.wan_interface}").` });
     } else if (!(wanMedida as any)?.activa) {
-      diagnostico.push({ nivel: "alerta", mensaje: `La interfaz WAN (${wanIf.name}) está caída.` });
+      diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `La interfaz WAN (${wanIf.name}) está caída.` });
     } else if (!wanIp) {
-      diagnostico.push({ nivel: "advertencia", mensaje: `La interfaz WAN (${wanIf.name}) no tiene IP asignada.` });
+      diagnostico.push({ nivel: "advertencia", fuente: "estado", mensaje: `La interfaz WAN (${wanIf.name}) no tiene IP asignada.` });
     }
     if (!lanIf) {
-      diagnostico.push({ nivel: "alerta", mensaje: `No se encontró la interfaz LAN configurada ("${r.lan_interface}").` });
+      diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `No se encontró la interfaz LAN configurada ("${r.lan_interface}").` });
     } else if (!(lanMedida as any)?.activa) {
-      diagnostico.push({ nivel: "alerta", mensaje: `La interfaz LAN (${lanIf.name}) está caída.` });
+      diagnostico.push({ nivel: "alerta", fuente: "estado", mensaje: `La interfaz LAN (${lanIf.name}) está caída.` });
     }
     for (const v of todasInterfaces) {
       if (v.tipo === "vlan" && !v.deshabilitada && !v.activa) {
-        diagnostico.push({ nivel: "advertencia", mensaje: `La VLAN "${v.nombre}" está caída.` });
+        diagnostico.push({ nivel: "advertencia", fuente: "estado", mensaje: `La VLAN "${v.nombre}" está caída.` });
       }
     }
     for (const l of logs.slice(0, 5)) {
       const esCritico = String(l.temas || "").includes("critical");
       diagnostico.push({
         nivel: esCritico ? "alerta" : "advertencia",
+        fuente: "registro",
         mensaje: `Registro del router${l.tiempo ? ` (${l.tiempo})` : ""}: ${l.mensaje || "sin detalle"}.`,
       });
     }

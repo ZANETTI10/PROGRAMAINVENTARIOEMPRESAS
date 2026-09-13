@@ -175,10 +175,18 @@ function pintarDashCard(item) {
       </div>`;
   }
 
-  let alertas = 0, advertencias = 0, fuera = 0;
+  // Los hallazgos con fuente "registro" son líneas del log (pueden ser
+  // viejas y ya resueltas) — no cuentan para el color de la tarjeta, solo
+  // los de fuente "estado" (lo que está pasando ahora mismo). Esto es lo
+  // que hace la vista más objetiva: el color refleja problemas activos,
+  // no ruido histórico del log.
+  let alertas = 0, advertencias = 0, fuera = 0, eventosLog = 0;
   routers.forEach((r) => {
     if (!r || !r.conectado) { fuera++; return; }
-    (r.diagnostico || []).forEach((d) => { if (d.nivel === "alerta") alertas++; else advertencias++; });
+    (r.diagnostico || []).forEach((d) => {
+      if (d.fuente === "registro") { eventosLog++; return; }
+      if (d.nivel === "alerta") alertas++; else advertencias++;
+    });
   });
 
   let nivel = "ok";
@@ -193,7 +201,8 @@ function pintarDashCard(item) {
   const badges = [];
   if (alertas > 0) badges.push(`<span class="pill pill-bad">⛔ ${alertas}</span>`);
   if (advertencias > 0) badges.push(`<span class="pill pill-warn">⚠️ ${advertencias}</span>`);
-  if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ Sin problemas</span>`);
+  if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ Sin problemas activos</span>`);
+  if (eventosLog > 0) badges.push(`<span class="pill" title="Líneas del log del router, pueden ser de hace días">📋 ${eventosLog} en el log</span>`);
 
   return `
     <div class="dash-card dash-${nivel}" data-dash-empresa="${item.empresa_id}">
@@ -580,12 +589,16 @@ function pintarInterfazFila(i) {
     </div>`;
 }
 
-function pintarDiagnostico(diagnostico, logs) {
+// Separa lo que está pasando AHORA (fuente "estado", se vuelve a revisar
+// en cada consulta) de lo que es historial del log (fuente "registro",
+// puede ser de hace días y ya haberse resuelto solo). Verlo por separado
+// es lo que hace el diagnóstico más objetivo para decidir qué revisar.
+function pintarDiagnostico(diagnostico) {
   const items = diagnostico || [];
-  if (items.length === 0) {
-    return `<div class="stat-label" style="margin:18px 0 4px;">Diagnóstico</div><div class="diag-ok">✓ No se detectaron problemas.</div>`;
-  }
-  const filas = items.map((d) => {
+  const activos = items.filter((d) => d.fuente !== "registro");
+  const deLog = items.filter((d) => d.fuente === "registro");
+
+  const filaDiag = (d) => {
     const clase = d.nivel === "alerta" ? "pill-bad" : "pill-warn";
     const icono = d.nivel === "alerta" ? "⛔" : "⚠️";
     return `
@@ -593,8 +606,17 @@ function pintarDiagnostico(diagnostico, logs) {
         <span class="pill ${clase}">${icono}</span>
         <span class="diag-msg">${escapeHtml(d.mensaje)}</span>
       </div>`;
-  }).join("");
-  return `<div class="stat-label" style="margin:18px 0 4px;">Diagnóstico (${items.length})</div>${filas}`;
+  };
+
+  const seccionActivos = activos.length
+    ? `<div class="stat-label" style="margin:18px 0 4px;">Estado actual (${activos.length})</div>${activos.map(filaDiag).join("")}`
+    : `<div class="stat-label" style="margin:18px 0 4px;">Estado actual</div><div class="diag-ok">✓ No hay problemas activos ahora mismo.</div>`;
+
+  const seccionLog = deLog.length
+    ? `<div class="stat-label" style="margin:18px 0 4px;">Eventos recientes en el log (${deLog.length}) <span class="mon-if-name">· pueden ser de hace días, no necesariamente activos</span></div>${deLog.map(filaDiag).join("")}`
+    : "";
+
+  return seccionActivos + seccionLog;
 }
 
 function pintarRouterEstado(r) {
@@ -617,7 +639,7 @@ function pintarRouterEstado(r) {
     <div class="mon-row"><span>Temperatura / Voltaje</span><span>${salud.temperature ? salud.temperature + " °C" : "—"} · ${salud.voltage ? salud.voltage + " V" : "—"}</span></div>
   ` : "";
   const interfacesLista = (r.interfaces || []).map(pintarInterfazFila).join("");
-  const diagnosticoHtml = pintarDiagnostico(r.diagnostico, r.logs);
+  const diagnosticoHtml = pintarDiagnostico(r.diagnostico);
 
   return `
     <div class="card mon-card">
