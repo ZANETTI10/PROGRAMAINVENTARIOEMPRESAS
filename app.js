@@ -9,6 +9,11 @@ let perfil = null; // { rol: 'admin' | 'tecnico', nombre }
 let empresas = [];
 let empresaInvActual = null;
 let empresaCredActual = null;
+// Empresa "recordada" entre Inventario, Contraseñas y Monitoreo: elegirla
+// en cualquiera de esas tres vistas la deja lista en las otras dos, para
+// no tener que reelegirla cada vez que se cambia de pestaña revisando el
+// mismo cliente.
+let empresaSeleccionadaGlobal = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -117,8 +122,40 @@ document.querySelectorAll(".nav-btn[data-view]").forEach((btn) => {
     btn.classList.add("active");
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
     $("view-" + btn.dataset.view).classList.add("active");
+    sincronizarSelectorEmpresaAlCambiarDeVista(btn.dataset.view);
   });
 });
+
+// Config de qué select y qué variable "actual" tiene cada una de las tres
+// vistas que comparten la empresa seleccionada.
+const VISTAS_CON_EMPRESA = {
+  inventario: { select: "invEmpresaSelect", actual: () => empresaInvActual },
+  credenciales: { select: "credEmpresaSelect", actual: () => empresaCredActual },
+  monitoreo: { select: "monEmpresaSelect", actual: () => empresaMonitoreoActual },
+};
+
+// Deja la misma empresa marcada en los otros dos selects (sin disparar su
+// carga todavía — eso solo pasa si de verdad se entra a esa vista).
+function sincronizarEmpresaGlobal(id) {
+  empresaSeleccionadaGlobal = id || null;
+  Object.values(VISTAS_CON_EMPRESA).forEach((cfg) => {
+    const sel = $(cfg.select);
+    if (sel && sel.value !== (id || "")) sel.value = id || "";
+  });
+}
+
+// Al entrar a Inventario/Contraseñas/Monitoreo, si ya hay una empresa
+// "recordada" de otra de las tres vistas y esta todavía no la tiene
+// cargada, la selecciona y dispara su carga — así no toca repetir el
+// mismo clic en cada pestaña para revisar al mismo cliente.
+function sincronizarSelectorEmpresaAlCambiarDeVista(vista) {
+  const cfg = VISTAS_CON_EMPRESA[vista];
+  if (!cfg || !empresaSeleccionadaGlobal || cfg.actual() === empresaSeleccionadaGlobal) return;
+  const sel = $(cfg.select);
+  if (!sel) return;
+  sel.value = empresaSeleccionadaGlobal;
+  sel.dispatchEvent(new Event("change"));
+}
 
 // ------------------------------------------------------------
 // Dashboard general — resumen del estado de TODAS las empresas de un
@@ -279,9 +316,12 @@ function pintarDashCard(item) {
 }
 
 function irAMonitoreoDesdeDashboard(empresaId) {
+  // Se marca como "empresa recordada" ANTES del clic de navegación: así,
+  // el propio cambio de vista (sincronizarSelectorEmpresaAlCambiarDeVista)
+  // ya deja esta empresa seleccionada y cargada en Monitoreo, sin repetir
+  // esa lógica acá. Solo falta disparar la verificación en vivo.
+  empresaSeleccionadaGlobal = empresaId;
   $("navMonitoreo").click();
-  $("monEmpresaSelect").value = empresaId;
-  $("monEmpresaSelect").dispatchEvent(new Event("change"));
   setTimeout(() => $("btnVerificarMonitoreo").click(), 60);
 }
 
@@ -360,6 +400,7 @@ async function borrarEmpresa(id) {
 
 $("invEmpresaSelect").addEventListener("change", async (e) => {
   empresaInvActual = e.target.value || null;
+  sincronizarEmpresaGlobal(empresaInvActual);
   await cargarEquipos();
 });
 
@@ -474,6 +515,7 @@ $("btnExportarInventario").addEventListener("click", async () => {
 
 $("credEmpresaSelect").addEventListener("change", async (e) => {
   empresaCredActual = e.target.value || null;
+  sincronizarEmpresaGlobal(empresaCredActual);
   await cargarCredenciales();
 });
 
@@ -572,6 +614,7 @@ let routerEditandoId = null;
 
 $("monEmpresaSelect").addEventListener("change", async (e) => {
   empresaMonitoreoActual = e.target.value || null;
+  sincronizarEmpresaGlobal(empresaMonitoreoActual);
   $("monResultado").innerHTML = "";
   $("monMensaje").style.display = "block";
   $("monMensaje").textContent = empresaMonitoreoActual ? "Da clic en \"Verificar ahora\" para ver el estado." : "Selecciona una empresa arriba.";
