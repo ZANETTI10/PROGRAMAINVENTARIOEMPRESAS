@@ -188,3 +188,39 @@ create table if not exists mikrotik_routers (
 );
 
 alter table mikrotik_routers enable row level security;
+
+-- ------------------------------------------------------------
+-- Auto-registro de equipos: el admin genera, por empresa, un "token"
+-- de instalación desde la pestaña Inventario. Ese token se pega una
+-- sola vez en el equipo del cliente (Windows o Mac) y de ahí en
+-- adelante el equipo se anota (y se mantiene actualizado) solo en el
+-- inventario, sin que haya que digitarlo a mano.
+--
+-- Igual que con mikrotik_routers: RLS activado pero con política solo
+-- para el admin (para poder generarlos/verlos/desactivarlos desde la
+-- app) — el equipo del cliente nunca ve ni usa esta tabla directo, le
+-- llega el token una sola vez al instalar y de ahí en adelante solo
+-- habla con la Edge Function "agente-inventario", que es la única que
+-- valida tokens usando la llave "service_role".
+-- ------------------------------------------------------------
+create table if not exists equipos_tokens (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  token text not null unique,
+  activo boolean not null default true,
+  creado_por text,
+  created_at timestamptz default now()
+);
+
+alter table equipos_tokens enable row level security;
+
+drop policy if exists equipos_tokens_admin on equipos_tokens;
+create policy equipos_tokens_admin on equipos_tokens for all
+  using (is_admin()) with check (is_admin());
+
+-- Columnas nuevas en equipos para distinguir lo agregado a mano de lo
+-- que reporta el agente instalado, y saber cuándo fue la última vez
+-- que un equipo "se conectó" (para detectar equipos que llevan tiempo
+-- sin reportarse).
+alter table equipos add column if not exists origen text not null default 'manual' check (origen in ('manual','agente'));
+alter table equipos add column if not exists actualizado_en timestamptz;
