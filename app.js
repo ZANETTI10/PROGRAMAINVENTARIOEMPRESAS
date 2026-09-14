@@ -786,9 +786,22 @@ function pintarDiagnostico(diagnostico) {
     ? `<div class="stat-label" style="margin:18px 0 4px;">Estado actual (${activos.length})</div>${activos.map(filaDiag).join("")}`
     : `<div class="stat-label" style="margin:18px 0 4px;">Estado actual</div><div class="diag-ok">✓ No hay problemas activos ahora mismo.</div>`;
 
-  const seccionLog = deLog.length
-    ? `<div class="stat-label" style="margin:18px 0 4px;">Eventos recientes en el log (${deLog.length}) <span class="mon-if-name">· pueden ser de hace días, no necesariamente activos</span></div>${deLog.map(filaDiag).join("")}`
-    : "";
+  // El log crudo casi siempre repite el mismo ruido (intentos de terceros,
+  // negociaciones VPN fallidas, etc.) y no es algo que haya que revisar
+  // día a día — se deja colapsado por defecto, igual que "todas las
+  // interfaces", en vez de siempre visible ocupando espacio.
+  let seccionLog = "";
+  if (deLog.length) {
+    const logToggleId = `monLogToggle${monToggleSeq++}`;
+    seccionLog = `
+      <button class="mon-toggle" data-toggle-interfaces="${logToggleId}" data-toggle-label="eventos recientes del log" data-toggle-count="${deLog.length}" type="button">
+        <span class="chev">▾</span> Ver eventos recientes del log (${deLog.length})
+      </button>
+      <div class="mon-interfaces-list" id="${logToggleId}">
+        <div class="mon-if-name" style="margin:8px 0 6px;">Pueden ser de hace días, no necesariamente activos.</div>
+        ${deLog.map(filaDiag).join("")}
+      </div>`;
+  }
 
   return seccionActivos + seccionLog;
 }
@@ -844,7 +857,7 @@ function pintarRouterEstado(r) {
 
       ${diagnosticoHtml}
 
-      <button class="mon-toggle" data-toggle-interfaces="${toggleId}" type="button">
+      <button class="mon-toggle" data-toggle-interfaces="${toggleId}" data-toggle-label="todas las interfaces" data-toggle-count="${interfaces.length}" type="button">
         <span class="chev">▾</span> Ver todas las interfaces (${interfaces.length})
       </button>
       <div class="mon-interfaces-list" id="${toggleId}">
@@ -863,7 +876,9 @@ $("monResultado").addEventListener("click", (e) => {
   if (!lista) return;
   const abierto = lista.classList.toggle("abierto");
   btn.classList.toggle("abierto", abierto);
-  btn.innerHTML = `<span class="chev">▾</span> ${abierto ? "Ocultar" : "Ver"} todas las interfaces (${lista.querySelectorAll(".mon-row").length})`;
+  const etiqueta = btn.dataset.toggleLabel || "todas las interfaces";
+  const cuenta = btn.dataset.toggleCount;
+  btn.innerHTML = `<span class="chev">▾</span> ${abierto ? "Ocultar" : "Ver"} ${etiqueta}${cuenta ? ` (${cuenta})` : ""}`;
 });
 
 // ---- Configurar routers MikroTik (solo admin) ----
