@@ -283,7 +283,15 @@ button:active { transform: translateY(1px); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 15px 16px; }
 .form-grid .full { grid-column: 1 / -1; }
 
-.table-wrap { overflow-x: auto; border-radius: 10px; }
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.table-wrap::-webkit-scrollbar { height: 5px; }
+.table-wrap::-webkit-scrollbar-track { background: transparent; }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
 th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
 th {
@@ -499,6 +507,13 @@ tbody tr:last-child td { border-bottom: none; }
   .nav-group { flex-direction: row; }
   .nav-btn { white-space: nowrap; }
   .main { padding: 20px; }
+  /* En celular el menú se desliza horizontalmente — una barra de scroll
+     delgada y del mismo estilo oscuro se ve mucho mejor que la barra
+     gris gruesa que pone el sistema por defecto. */
+  .sidebar { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .sidebar::-webkit-scrollbar { height: 5px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 }
 @media (max-width: 720px) {
   .login-shell { flex-direction: column; max-width: 420px; }
