@@ -184,7 +184,7 @@ async function cargarDashboard() {
     return;
   }
 
-  const items = data.empresas || [];
+  let items = data.empresas || [];
   if (items.length === 0) {
     $("dashMensaje").style.display = "block";
     $("dashMensaje").textContent = "Todavía no hay empresas registradas.";
@@ -192,6 +192,14 @@ async function cargarDashboard() {
     $("dashResumen").style.display = "none";
     return;
   }
+
+  // Las que necesitan atención primero, luego advertencias, luego las
+  // que están bien, y al final las que no tienen router — así lo grave
+  // se ve de una vez arriba, sin tener que bajar a buscarlo entre las
+  // demás empresas (el orden alfabético que trae el servidor se
+  // conserva dentro de cada grupo, gracias a que sort() es estable).
+  const RANGO_NIVEL_DASH = { alerta: 0, advertencia: 1, ok: 2, sinRouter: 3 };
+  items = items.slice().sort((a, b) => RANGO_NIVEL_DASH[estadoEmpresaDash(a).nivel] - RANGO_NIVEL_DASH[estadoEmpresaDash(b).nivel]);
 
   $("dashResumen").style.display = "grid";
   const resumen = pintarResumenDashboard(items);
@@ -218,6 +226,33 @@ async function cargarDashboard() {
   });
 }
 
+// Calcula el estado de una empresa para el Dashboard (nivel + conteos) a
+// partir de lo que devuelve "mikrotik-estado" — la usan la franja de
+// resumen, cada tarjeta y el orden en que se muestran las tarjetas, para
+// que los tres coincidan siempre entre sí. Los hallazgos con fuente
+// "registro" son líneas del log (pueden ser viejas y ya resueltas) — no
+// cuentan para el nivel/color, solo los de fuente "estado" (lo que está
+// pasando ahora mismo).
+function estadoEmpresaDash(item) {
+  const routers = item.routers || [];
+  if (routers.length === 0) return { nivel: "sinRouter", alertas: 0, advertencias: 0, fuera: 0, eventosLog: 0 };
+
+  let alertas = 0, advertencias = 0, fuera = 0, eventosLog = 0;
+  routers.forEach((r) => {
+    if (!r || !r.conectado) { fuera++; return; }
+    (r.diagnostico || []).forEach((d) => {
+      if (d.fuente === "registro") { eventosLog++; return; }
+      if (d.nivel === "alerta") alertas++; else advertencias++;
+    });
+  });
+
+  let nivel = "ok";
+  if (fuera > 0 || alertas > 0) nivel = "alerta";
+  else if (advertencias > 0) nivel = "advertencia";
+
+  return { nivel, alertas, advertencias, fuera, eventosLog };
+}
+
 // Franja de resumen arriba del grid: cuenta cuántas empresas están bien,
 // cuántas tienen advertencias, cuántas necesitan atención y cuántas no
 // tienen router — para que de un vistazo, antes de leer tarjeta por
@@ -225,18 +260,10 @@ async function cargarDashboard() {
 function pintarResumenDashboard(items) {
   let ok = 0, advertencia = 0, alerta = 0, sinRouter = 0;
   items.forEach((item) => {
-    const routers = item.routers || [];
-    if (routers.length === 0) { sinRouter++; return; }
-    let a = 0, adv = 0, fuera = 0;
-    routers.forEach((r) => {
-      if (!r || !r.conectado) { fuera++; return; }
-      (r.diagnostico || []).forEach((d) => {
-        if (d.fuente === "registro") return;
-        if (d.nivel === "alerta") a++; else adv++;
-      });
-    });
-    if (fuera > 0 || a > 0) alerta++;
-    else if (adv > 0) advertencia++;
+    const nivel = estadoEmpresaDash(item).nivel;
+    if (nivel === "alerta") alerta++;
+    else if (nivel === "advertencia") advertencia++;
+    else if (nivel === "sinRouter") sinRouter++;
     else ok++;
   });
 
@@ -287,23 +314,7 @@ function pintarDashCard(item) {
       </div>`;
   }
 
-  // Los hallazgos con fuente "registro" son líneas del log (pueden ser
-  // viejas y ya resueltas) — no cuentan para el color de la tarjeta, solo
-  // los de fuente "estado" (lo que está pasando ahora mismo). Esto es lo
-  // que hace la vista más objetiva: el color refleja problemas activos,
-  // no ruido histórico del log.
-  let alertas = 0, advertencias = 0, fuera = 0, eventosLog = 0;
-  routers.forEach((r) => {
-    if (!r || !r.conectado) { fuera++; return; }
-    (r.diagnostico || []).forEach((d) => {
-      if (d.fuente === "registro") { eventosLog++; return; }
-      if (d.nivel === "alerta") alertas++; else advertencias++;
-    });
-  });
-
-  let nivel = "ok";
-  if (fuera > 0 || alertas > 0) nivel = "alerta";
-  else if (advertencias > 0) nivel = "advertencia";
+  const { nivel, alertas, advertencias, fuera, eventosLog } = estadoEmpresaDash(item);
 
   const estadoClase = nivel === "alerta" ? "pill-bad" : (nivel === "advertencia" ? "pill-warn" : "pill-ok");
   const estadoTxt = fuera > 0
