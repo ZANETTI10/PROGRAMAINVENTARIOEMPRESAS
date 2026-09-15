@@ -194,7 +194,13 @@ async function cargarDashboard() {
   }
 
   $("dashResumen").style.display = "grid";
-  $("dashResumen").innerHTML = pintarResumenDashboard(items);
+  const resumen = pintarResumenDashboard(items);
+  $("dashResumen").innerHTML = resumen.html;
+
+  // Punto rojo en el botón "Dashboard" del menú: así, aunque estés en
+  // otra pestaña (Inventario, Monitoreo, etc.), ves de un vistazo que
+  // hay algo grave por revisar sin tener que entrar a mirar.
+  $("navDashboardAlerta").style.display = resumen.alerta > 0 ? "block" : "none";
 
   $("dashGrid").innerHTML = items.map(pintarDashCard).join("");
   $("dashActualizado").style.display = "inline";
@@ -202,6 +208,13 @@ async function cargarDashboard() {
 
   $("dashGrid").querySelectorAll("[data-dash-empresa]").forEach((el) => {
     el.addEventListener("click", () => irAMonitoreoDesdeDashboard(el.dataset.dashEmpresa));
+  });
+
+  $("dashGrid").querySelectorAll("[data-reiniciar-router]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      reiniciarRouter(b.dataset.reiniciarRouter, b.dataset.reiniciarNombre, b.dataset.reiniciarEmpresa, b);
+    });
   });
 }
 
@@ -227,11 +240,40 @@ function pintarResumenDashboard(items) {
     else ok++;
   });
 
-  return `
+  const html = `
     <div class="dash-resumen-item dr-ok"><div class="dr-icon">✓</div><span class="dr-num">${ok}</span><span class="dr-label">Sin problemas</span></div>
     <div class="dash-resumen-item dr-warn"><div class="dr-icon">⚠️</div><span class="dr-num">${advertencia}</span><span class="dr-label">Con advertencias</span></div>
     <div class="dash-resumen-item dr-bad"><div class="dr-icon">⛔</div><span class="dr-num">${alerta}</span><span class="dr-label">Necesitan atención</span></div>
     <div class="dash-resumen-item dr-muted"><div class="dr-icon">○</div><span class="dr-num">${sinRouter}</span><span class="dr-label">Sin router</span></div>`;
+
+  return { html, ok, advertencia, alerta, sinRouter };
+}
+
+// Manda la orden de reinicio a un router MikroTik (Edge Function
+// "mikrotik-config", acción "reiniciar" — solo el admin puede, la propia
+// función lo valida del lado del servidor). Se usa tanto desde las
+// tarjetas del Dashboard como desde la tabla de routers en Monitoreo.
+async function reiniciarRouter(id, nombre, empresaNombre, boton) {
+  const nombreRouter = nombre || "este router";
+  const aviso = `¿Reiniciar "${nombreRouter}"${empresaNombre ? " (" + empresaNombre + ")" : ""}?\n\nTodos los equipos conectados a esa red van a perder internet por 1-2 minutos mientras vuelve a encender.`;
+  if (!confirm(aviso)) return;
+
+  const textoOriginal = boton.textContent;
+  boton.disabled = true;
+  boton.textContent = "⏳";
+
+  const { data, error } = await sb.functions.invoke("mikrotik-config", {
+    body: { accion: "reiniciar", id },
+  });
+
+  boton.disabled = false;
+  boton.textContent = textoOriginal;
+
+  if (error || data?.error) {
+    toast("Error al reiniciar: " + (data?.error || error.message), true);
+    return;
+  }
+  toast(`Reiniciando "${nombreRouter}"… vuelve a estar en línea en 1-2 minutos.`);
 }
 
 function pintarDashCard(item) {
@@ -297,12 +339,20 @@ function pintarDashCard(item) {
     const cpuRing = (cpu != null)
       ? `<span class="cpu-ring" style="--pct:${cpu};--ring-color:${cpu >= 80 ? "var(--danger)" : cpu >= 50 ? "var(--warn)" : "var(--accent)"}"><span class="cpu-ring-val">${cpu}</span></span>`
       : "";
+    const nombreRouter = r.identidad || r.nombre || "Router";
+    // Reiniciar es una acción real sobre el equipo del cliente (corta la
+    // red 1-2 min) — solo se ofrece al admin, y solo si el router está
+    // conectado ahora mismo (si no, no hay cómo mandarle el comando).
+    const btnReiniciar = (perfil?.rol === "admin")
+      ? `<button class="icon-btn dash-router-reboot" data-reiniciar-router="${r.id}" data-reiniciar-nombre="${escapeAttr(nombreRouter)}" data-reiniciar-empresa="${escapeAttr(item.empresa_nombre)}" title="Reiniciar router">⟲</button>`
+      : "";
     return `
       <div class="dash-router-row">
         <span class="dash-router-dot dot-on"></span>
-        <span class="dash-router-name">${escapeHtml(r.identidad || r.nombre || "Router")}</span>
+        <span class="dash-router-name">${escapeHtml(nombreRouter)}</span>
         <span class="dash-router-info">${stats.join(" · ") || "En línea"}</span>
         ${cpuRing}
+        ${btnReiniciar}
       </div>`;
   }).join("");
 
@@ -963,6 +1013,7 @@ async function cargarRoutersConfigurados() {
       <td>${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}</td>
       <td>${escapeHtml(r.wan_interface)} / ${escapeHtml(r.lan_interface)}</td>
       <td class="actions-cell">
+        <button class="icon-btn" data-reiniciar-router-tabla="${r.id}" data-reiniciar-nombre="${escapeAttr(r.nombre || "")}">Reiniciar</button>
         <button class="icon-btn" data-editar-router="${r.id}">Editar</button>
         <button class="icon-btn danger" data-borrar-router="${r.id}">Eliminar</button>
       </td>`;
@@ -988,6 +1039,12 @@ async function cargarRoutersConfigurados() {
       $("btnCancelarEdicionRouter").style.display = "inline-block";
       $("routerError").textContent = "";
       abrirConfigRouter();
+    });
+  });
+
+  tbody.querySelectorAll("[data-reiniciar-router-tabla]").forEach((b) => {
+    b.addEventListener("click", () => {
+      reiniciarRouter(b.dataset.reiniciarRouterTabla, b.dataset.reiniciarNombre, null, b);
     });
   });
 

@@ -213,6 +213,11 @@ button:active { transform: translateY(1px); }
   color: var(--accent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
+.nav-alert-dot {
+  width: 8px; height: 8px; min-width: 8px; border-radius: 50%;
+  background: var(--danger); box-shadow: 0 0 6px var(--danger);
+  margin-left: auto; animation: dash-pulse 2.4s ease-in-out infinite;
+}
 
 .sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-soft); }
 .user-email { font-size: 0.74rem; color: var(--text-faint); margin-bottom: 10px; word-break: break-all; }
@@ -433,6 +438,14 @@ tbody tr:last-child td { border-bottom: none; }
 .cpu-ring::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--card); }
 .cpu-ring-val { position: relative; z-index: 1; font-size: 0.56rem; font-family: var(--font-mono); color: var(--text-dim); font-weight: 600; }
 
+.dash-router-reboot {
+  flex-shrink: 0; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  background: transparent; color: var(--text-faint); font-size: 0.95rem; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dash-router-reboot:hover { background: rgba(251, 113, 133, 0.12); color: var(--danger); }
+.dash-router-reboot:disabled { opacity: 0.5; }
+
 .dash-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
 .mon-card h3 { display: flex; align-items: center; gap: 10px; }
@@ -563,6 +576,7 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="nav-btn active" data-view="dashboard" id="navDashboard">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
         <span>Dashboard</span>
+        <span class="nav-alert-dot" id="navDashboardAlerta" style="display:none;" title="Hay empresas con problemas activos"></span>
       </button>
       <button class="nav-btn" data-view="empresas">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 21V7l8-4 8 4v14M9 21v-6h6v6M4 21h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
