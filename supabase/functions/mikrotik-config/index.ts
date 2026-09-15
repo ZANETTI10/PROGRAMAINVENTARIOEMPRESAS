@@ -334,6 +334,94 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ---------------- Sincronizar hora (Colombia) ----------------
+    // Pone la zona horaria de Bogota y prende el cliente NTP para que la
+    // fecha y hora del router queden siempre correctas, sin depender de
+    // que alguien la ajuste a mano. La sintaxis del cliente NTP cambio
+    // entre RouterOS 6 y 7 (y hasta entre versiones de la 7), asi que
+    // primero se detecta la version y despues se prueban las variantes
+    // de comando en orden, quedandose con la primera que funcione.
+    const NTP_SERVIDORES = ["216.239.35.0", "216.239.35.4"]; // time.google.com (anycast, confiable)
+
+    if (accion === "sincronizar_hora") {
+      if (!body.id) return json({ error: "Falta el router a sincronizar." }, 400);
+
+      const { data: router, error: routerError } = await admin
+        .from("mikrotik_routers")
+        .select("*")
+        .eq("id", body.id)
+        .maybeSingle();
+
+      if (routerError) return json({ error: routerError.message }, 400);
+      if (!router) return json({ error: "No se encontró ese router." }, 404);
+
+      let api: MikrotikApi | null = null;
+      try {
+        api = await MikrotikApi.conectar(router.host, router.puerto, router.ssl);
+        await api.login(router.usuario, router.password);
+
+        // Zona horaria: igual en RouterOS 6 y 7.
+        await api.comando(["/system/clock/set", "=time-zone-name=America/Bogota"], 8000);
+        try {
+          // No todas las versiones tienen esta propiedad; si falla no es grave.
+          await api.comando(["/system/clock/set", "=time-zone-autodetect=no"], 8000);
+        } catch (_e) { /* ignorar */ }
+
+        // Version del router, para saber que sintaxis de NTP usar.
+        const recurso = await api.comando(["/system/resource/print"], 8000);
+        const versionTexto = (recurso[0]?.version || "").trim();
+        const versionMayor = parseInt(versionTexto.split(".")[0], 10) || 6;
+
+        let ntpOk = false;
+        let ntpError = "";
+
+        if (versionMayor >= 7) {
+          // Variante nueva (RouterOS 7 reciente): servidores en submenu propio.
+          try {
+            await api.comando(["/system/ntp/client/set", "=enabled=yes"], 8000);
+            for (const servidor of NTP_SERVIDORES) {
+              try {
+                await api.comando(["/system/ntp/client/servers/add", `=address=${servidor}`], 8000);
+              } catch (eServ) {
+                // Si ya existe ese servidor agregado, no es un error real.
+                if (!String(eServ?.message || eServ).toLowerCase().includes("already")) throw eServ;
+              }
+            }
+            ntpOk = true;
+          } catch (e7) {
+            // Variante intermedia de RouterOS 7: propiedad "servers" en una sola linea.
+            try {
+              await api.comando(["/system/ntp/client/set", `=servers=${NTP_SERVIDORES.join(",")}`, "=enabled=yes"], 8000);
+              ntpOk = true;
+            } catch (e7b) {
+              ntpError = String(e7b?.message || e7b);
+            }
+          }
+        } else {
+          // RouterOS 6: primary-ntp / secondary-ntp.
+          try {
+            await api.comando([
+              "/system/ntp/client/set",
+              "=enabled=yes",
+              `=primary-ntp=${NTP_SERVIDORES[0]}`,
+              `=secondary-ntp=${NTP_SERVIDORES[1]}`,
+              "=mode=unicast",
+            ], 8000);
+            ntpOk = true;
+          } catch (e6) {
+            ntpError = String(e6?.message || e6);
+          }
+        }
+
+        if (!ntpOk) return json({ error: "Zona horaria puesta, pero el NTP falló: " + ntpError }, 500);
+        return json({ ok: true, version: versionTexto });
+      } catch (e) {
+        return json({ error: String(e?.message || e) }, 500);
+      } finally {
+        api?.cerrar();
+      }
+    }
+
     return json({ error: "Acción no reconocida." }, 400);
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);

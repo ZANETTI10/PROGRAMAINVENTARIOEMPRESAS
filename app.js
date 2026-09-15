@@ -67,6 +67,7 @@ async function entrarApp(session) {
   $("personalNombre").value = perfil.nombre || "";
 
   $("navEquipo").style.display = perfil.rol === "admin" ? "flex" : "none";
+  $("btnSincronizarHoraTodos").style.display = perfil.rol === "admin" ? "inline-block" : "none";
 
   await cargarEmpresas();
   await cargarPersonal();
@@ -166,6 +167,12 @@ function sincronizarSelectorEmpresaAlCambiarDeVista(vista) {
 // ------------------------------------------------------------
 
 $("btnActualizarDashboard").addEventListener("click", cargarDashboard);
+$("btnSincronizarHoraTodos").addEventListener("click", () => sincronizarHoraTodos($("btnSincronizarHoraTodos")));
+
+// Guarda lo último que cargó el Dashboard (con los id de cada router) para
+// que "Sincronizar hora en todos" pueda recorrer todos los routers sin
+// tener que pedirlos de nuevo por separado.
+let ultimoDashboardItems = [];
 
 async function cargarDashboard() {
   $("btnActualizarDashboard").disabled = true;
@@ -200,6 +207,7 @@ async function cargarDashboard() {
   // conserva dentro de cada grupo, gracias a que sort() es estable).
   const RANGO_NIVEL_DASH = { alerta: 0, advertencia: 1, ok: 2, sinRouter: 3 };
   items = items.slice().sort((a, b) => RANGO_NIVEL_DASH[estadoEmpresaDash(a).nivel] - RANGO_NIVEL_DASH[estadoEmpresaDash(b).nivel]);
+  ultimoDashboardItems = items;
 
   $("dashResumen").style.display = "grid";
   const resumen = pintarResumenDashboard(items);
@@ -222,6 +230,13 @@ async function cargarDashboard() {
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       reiniciarRouter(b.dataset.reiniciarRouter, b.dataset.reiniciarNombre, b.dataset.reiniciarEmpresa, b);
+    });
+  });
+
+  $("dashGrid").querySelectorAll("[data-hora-router]").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      sincronizarHoraRouter(b.dataset.horaRouter, b.dataset.horaNombre, b);
     });
   });
 }
@@ -303,6 +318,72 @@ async function reiniciarRouter(id, nombre, empresaNombre, boton) {
   toast(`Reiniciando "${nombreRouter}"… vuelve a estar en línea en 1-2 minutos.`);
 }
 
+// Pone la hora de Colombia (zona horaria Bogotá + sincronización NTP) en un
+// solo router. A diferencia de reiniciar, esto no corta internet a nadie —
+// por eso no pide confirmación cuando es un solo router.
+async function sincronizarHoraRouter(id, nombre, boton) {
+  const textoOriginal = boton.textContent;
+  boton.disabled = true;
+  boton.textContent = "⏳";
+
+  const { data, error } = await sb.functions.invoke("mikrotik-config", {
+    body: { accion: "sincronizar_hora", id },
+  });
+
+  boton.disabled = false;
+  boton.textContent = textoOriginal;
+
+  if (error || data?.error) {
+    toast(`Error al poner la hora en "${nombre || "el router"}": ` + (data?.error || error.message), true);
+    return false;
+  }
+  toast(`Hora de Colombia configurada en "${nombre || "el router"}".`);
+  return true;
+}
+
+// Hace lo mismo que sincronizarHoraRouter pero en todos los routers que el
+// Dashboard tenga cargados en ese momento (uno por uno, para no saturar).
+// Al final muestra un resumen de cuántos quedaron bien y cuáles fallaron.
+async function sincronizarHoraTodos(boton) {
+  const routers = [];
+  ultimoDashboardItems.forEach((item) => {
+    (item.routers || []).forEach((r) => {
+      if (r && r.id) routers.push({ id: r.id, nombre: r.identidad || r.nombre || item.empresa_nombre, empresa: item.empresa_nombre });
+    });
+  });
+
+  if (routers.length === 0) {
+    toast("No hay routers cargados. Da clic primero en \"Actualizar estado\".", true);
+    return;
+  }
+
+  if (!confirm(`¿Poner la hora de Colombia (zona horaria + sincronización automática) en los ${routers.length} routers del Dashboard?\n\nNo corta internet a nadie, pero se conecta a cada router uno por uno y puede tardar un momento.`)) return;
+
+  const textoOriginal = boton.textContent;
+  boton.disabled = true;
+
+  let ok = 0;
+  const fallos = [];
+  for (let i = 0; i < routers.length; i++) {
+    const r = routers[i];
+    boton.textContent = `Sincronizando… (${i + 1}/${routers.length})`;
+    const { data, error } = await sb.functions.invoke("mikrotik-config", {
+      body: { accion: "sincronizar_hora", id: r.id },
+    });
+    if (error || data?.error) fallos.push(`${r.empresa} - ${r.nombre}: ${data?.error || error.message}`);
+    else ok++;
+  }
+
+  boton.disabled = false;
+  boton.textContent = textoOriginal;
+
+  if (fallos.length === 0) {
+    toast(`Listo: hora de Colombia puesta en los ${ok} routers.`);
+  } else {
+    toast(`${ok} routers quedaron bien, ${fallos.length} fallaron: ${fallos.join(" | ")}`, true);
+  }
+}
+
 function pintarDashCard(item) {
   const routers = item.routers || [];
 
@@ -357,12 +438,16 @@ function pintarDashCard(item) {
     const btnReiniciar = (perfil?.rol === "admin")
       ? `<button class="icon-btn dash-router-reboot" data-reiniciar-router="${r.id}" data-reiniciar-nombre="${escapeAttr(nombreRouter)}" data-reiniciar-empresa="${escapeAttr(item.empresa_nombre)}" title="Reiniciar router">⟲</button>`
       : "";
+    const btnHora = (perfil?.rol === "admin")
+      ? `<button class="icon-btn dash-router-reboot" data-hora-router="${r.id}" data-hora-nombre="${escapeAttr(nombreRouter)}" title="Poner hora de Colombia">🕒</button>`
+      : "";
     return `
       <div class="dash-router-row">
         <span class="dash-router-dot dot-on"></span>
         <span class="dash-router-name">${escapeHtml(nombreRouter)}</span>
         <span class="dash-router-info">${stats.join(" · ") || "En línea"}</span>
         ${cpuRing}
+        ${btnHora}
         ${btnReiniciar}
       </div>`;
   }).join("");
@@ -1024,6 +1109,7 @@ async function cargarRoutersConfigurados() {
       <td>${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}</td>
       <td>${escapeHtml(r.wan_interface)} / ${escapeHtml(r.lan_interface)}</td>
       <td class="actions-cell">
+        <button class="icon-btn" data-hora-router-tabla="${r.id}" data-hora-nombre="${escapeAttr(r.nombre || "")}">Hora CO</button>
         <button class="icon-btn" data-reiniciar-router-tabla="${r.id}" data-reiniciar-nombre="${escapeAttr(r.nombre || "")}">Reiniciar</button>
         <button class="icon-btn" data-editar-router="${r.id}">Editar</button>
         <button class="icon-btn danger" data-borrar-router="${r.id}">Eliminar</button>
@@ -1056,6 +1142,12 @@ async function cargarRoutersConfigurados() {
   tbody.querySelectorAll("[data-reiniciar-router-tabla]").forEach((b) => {
     b.addEventListener("click", () => {
       reiniciarRouter(b.dataset.reiniciarRouterTabla, b.dataset.reiniciarNombre, null, b);
+    });
+  });
+
+  tbody.querySelectorAll("[data-hora-router-tabla]").forEach((b) => {
+    b.addEventListener("click", () => {
+      sincronizarHoraRouter(b.dataset.horaRouterTabla, b.dataset.horaNombre, b);
     });
   });
 
