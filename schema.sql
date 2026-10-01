@@ -105,8 +105,8 @@ drop policy if exists perfil_update on usuarios_perfil;
 create policy perfil_update on usuarios_perfil for update
   using (auth.uid() = id);
 
--- Equipos: cualquier usuario logueado puede ver y agregar;
--- solo el admin puede borrar.
+-- Equipos: cualquier usuario logueado puede ver, agregar y editar
+-- (corregir datos del inventario); solo el admin puede borrar.
 drop policy if exists equipos_select on equipos;
 create policy equipos_select on equipos for select
   using (auth.role() = 'authenticated');
@@ -115,15 +115,21 @@ drop policy if exists equipos_insert on equipos;
 create policy equipos_insert on equipos for insert
   with check (auth.role() = 'authenticated');
 
+drop policy if exists equipos_update on equipos;
+create policy equipos_update on equipos for update
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
 drop policy if exists equipos_delete on equipos;
 create policy equipos_delete on equipos for delete
   using (is_admin());
 
--- Credenciales de empresas: cualquier usuario logueado puede ver y
--- agregar (correo, routers, etc. de los clientes); solo el admin borra.
+-- Credenciales de empresas: cualquier usuario logueado puede ver,
+-- agregar y editar (correo, routers, etc. de los clientes); solo el
+-- admin borra.
 drop policy if exists credenciales_all on credenciales;
 drop policy if exists credenciales_select on credenciales;
 drop policy if exists credenciales_insert on credenciales;
+drop policy if exists credenciales_update on credenciales;
 drop policy if exists credenciales_delete on credenciales;
 
 create policy credenciales_select on credenciales for select
@@ -131,6 +137,9 @@ create policy credenciales_select on credenciales for select
 
 create policy credenciales_insert on credenciales for insert
   with check (auth.role() = 'authenticated');
+
+create policy credenciales_update on credenciales for update
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 create policy credenciales_delete on credenciales for delete
   using (is_admin());

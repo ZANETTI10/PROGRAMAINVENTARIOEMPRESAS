@@ -503,11 +503,24 @@ async function cargarEmpresas() {
       <td><span class="pill">${contarEq(emp.id)}</span></td>
       <td><span class="pill">${contarCred(emp.id)}</span></td>
       <td class="actions-cell">
-        ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-empresa="${emp.id}">Borrar</button>` : ""}
+        ${perfil.rol === "admin" ? `<button class="icon-btn" data-editar-empresa="${emp.id}">Editar</button><button class="icon-btn danger" data-borrar-empresa="${emp.id}">Borrar</button>` : ""}
       </td>`;
     tbody.appendChild(tr);
+    tr.dataset.empresaJson = JSON.stringify(emp);
   });
   $("empresasEmpty").style.display = empresas.length ? "none" : "block";
+
+  document.querySelectorAll("[data-editar-empresa]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const emp = JSON.parse(b.closest("tr").dataset.empresaJson);
+      empresaEditandoId = emp.id;
+      $("nuevaEmpresaNombre").value = emp.nombre || "";
+      $("empresaFormTitulo").textContent = "Editar empresa";
+      $("btnCrearEmpresa").textContent = "Guardar cambios";
+      $("btnCancelarEdicionEmpresa").style.display = "inline-block";
+      $("nuevaEmpresaNombre").focus();
+    });
+  });
 
   document.querySelectorAll("[data-borrar-empresa]").forEach((b) => {
     b.addEventListener("click", () => borrarEmpresa(b.dataset.borrarEmpresa));
@@ -523,15 +536,28 @@ async function cargarEmpresas() {
   $("empresaFormCard").style.display = perfil.rol === "admin" ? "block" : "none";
 }
 
+let empresaEditandoId = null;
+
 $("btnCrearEmpresa").addEventListener("click", async () => {
   const nombre = $("nuevaEmpresaNombre").value.trim();
   if (!nombre) { toast("Escribe el nombre de la empresa.", true); return; }
-  const { error } = await sb.from("empresas").insert({ nombre });
-  if (error) { toast("Error al crear: " + error.message, true); return; }
-  $("nuevaEmpresaNombre").value = "";
-  toast("Empresa agregada.");
+  const { error } = empresaEditandoId
+    ? await sb.from("empresas").update({ nombre }).eq("id", empresaEditandoId)
+    : await sb.from("empresas").insert({ nombre });
+  if (error) { toast("Error al " + (empresaEditandoId ? "actualizar" : "crear") + ": " + error.message, true); return; }
+  toast(empresaEditandoId ? "Empresa actualizada." : "Empresa agregada.");
+  cancelarEdicionEmpresa();
   await cargarEmpresas();
 });
+
+function cancelarEdicionEmpresa() {
+  empresaEditandoId = null;
+  $("nuevaEmpresaNombre").value = "";
+  $("empresaFormTitulo").textContent = "Nueva empresa";
+  $("btnCrearEmpresa").textContent = "Agregar";
+  $("btnCancelarEdicionEmpresa").style.display = "none";
+}
+$("btnCancelarEdicionEmpresa").addEventListener("click", cancelarEdicionEmpresa);
 
 async function borrarEmpresa(id) {
   const { error } = await sb.from("empresas").delete().eq("id", id);
@@ -545,6 +571,7 @@ async function borrarEmpresa(id) {
 // ------------------------------------------------------------
 
 $("invEmpresaSelect").addEventListener("change", async (e) => {
+  cancelarEdicionEquipo();
   empresaInvActual = e.target.value || null;
   sincronizarEmpresaGlobal(empresaInvActual);
   await cargarEquipos();
@@ -557,6 +584,17 @@ const CAMPOS_EQUIPO = [
   ["discoDuro", "eqDisco"], ["tipoDisco", "eqTipoDisco"], ["licenciaSo", "eqLicenciaSO"],
   ["tipoLicencia", "eqTipoLicencia"], ["comentarios", "eqComentarios"], ["registradoPor", "eqRegistradoPor"],
 ];
+// Nombre de columna real en la base de datos para cada campo del
+// formulario — se usa tanto para guardar (insertar/actualizar) como
+// para rellenar el formulario al editar un equipo existente.
+const CAMPOS_EQUIPO_DB = {
+  tipoEquipo: "tipo_equipo", nombreRed: "nombre_red", sitio: "sitio", responsable: "responsable",
+  referencia: "referencia", serial: "serial", procesador: "procesador", memoriaRam: "memoria_ram",
+  tipoMemoria: "tipo_memoria", discoDuro: "disco_duro", tipoDisco: "tipo_disco", licenciaSo: "licencia_so",
+  tipoLicencia: "tipo_licencia", comentarios: "comentarios", registradoPor: "registrado_por",
+};
+
+let equipoEditandoId = null;
 
 $("btnGuardarEquipo").addEventListener("click", async () => {
   $("equipoError").textContent = "";
@@ -571,32 +609,31 @@ $("btnGuardarEquipo").addEventListener("click", async () => {
     return;
   }
 
-  const { error } = await sb.from("equipos").insert({
-    empresa_id: empresaInvActual,
-    tipo_equipo: valores.tipoEquipo,
-    nombre_red: valores.nombreRed,
-    sitio: valores.sitio,
-    responsable: valores.responsable,
-    referencia: valores.referencia,
-    serial: valores.serial,
-    procesador: valores.procesador,
-    memoria_ram: valores.memoriaRam,
-    tipo_memoria: valores.tipoMemoria,
-    disco_duro: valores.discoDuro,
-    tipo_disco: valores.tipoDisco,
-    licencia_so: valores.licenciaSo,
-    tipo_licencia: valores.tipoLicencia,
-    comentarios: valores.comentarios,
-    registrado_por: valores.registradoPor || sesion.user.email,
-  });
+  const registro = { empresa_id: empresaInvActual };
+  CAMPOS_EQUIPO.forEach(([campo]) => { registro[CAMPOS_EQUIPO_DB[campo]] = valores[campo]; });
+  if (!registro.registrado_por) registro.registrado_por = sesion.user.email;
+
+  const { error } = equipoEditandoId
+    ? await sb.from("equipos").update(registro).eq("id", equipoEditandoId)
+    : await sb.from("equipos").insert(registro);
 
   if (error) { $("equipoError").textContent = "Error al guardar: " + error.message; return; }
 
-  CAMPOS_EQUIPO.forEach(([, id]) => { if (id !== "eqRegistradoPor") $(id).value = ""; });
-  toast("Equipo guardado.");
+  toast(equipoEditandoId ? "Equipo actualizado." : "Equipo guardado.");
+  cancelarEdicionEquipo();
   await cargarEquipos();
   await cargarEmpresas();
 });
+
+function cancelarEdicionEquipo() {
+  equipoEditandoId = null;
+  CAMPOS_EQUIPO.forEach(([, id]) => { if (id !== "eqRegistradoPor") $(id).value = ""; });
+  $("equipoFormTitulo").textContent = "Registrar equipo";
+  $("btnGuardarEquipo").textContent = "Guardar equipo";
+  $("btnCancelarEdicionEquipo").style.display = "none";
+  $("equipoError").textContent = "";
+}
+$("btnCancelarEdicionEquipo").addEventListener("click", cancelarEdicionEquipo);
 
 async function cargarEquipos() {
   const tbody = $("tablaEquipos");
@@ -624,14 +661,33 @@ async function cargarEquipos() {
       <td>${escapeHtml(r.disco_duro)}</td><td>${escapeHtml(r.tipo_disco)}</td>
       <td>${escapeHtml(r.licencia_so)}</td><td>${escapeHtml(r.tipo_licencia)}</td>
       <td>${escapeHtml(r.comentarios)}</td><td>${escapeHtml(r.registrado_por)}</td>
-      <td class="actions-cell">${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-equipo="${r.id}">Borrar</button>` : ""}</td>`;
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-equipo="${r.id}">Editar</button>
+        ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-equipo="${r.id}">Borrar</button>` : ""}
+      </td>`;
     tbody.appendChild(tr);
+    tr.dataset.equipoJson = JSON.stringify(r);
+  });
+
+  tbody.querySelectorAll("[data-editar-equipo]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const r = JSON.parse(b.closest("tr").dataset.equipoJson);
+      equipoEditandoId = r.id;
+      CAMPOS_EQUIPO.forEach(([campo, id]) => { $(id).value = r[CAMPOS_EQUIPO_DB[campo]] || ""; });
+      $("equipoFormTitulo").textContent = "Editar equipo";
+      $("btnGuardarEquipo").textContent = "Guardar cambios";
+      $("btnCancelarEdicionEquipo").style.display = "inline-block";
+      $("equipoError").textContent = "";
+      $("equipoFormTitulo").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 
   document.querySelectorAll("[data-borrar-equipo]").forEach((b) => {
     b.addEventListener("click", async () => {
+      if (!confirm("¿Borrar este equipo del inventario?")) return;
       const { error } = await sb.from("equipos").delete().eq("id", b.dataset.borrarEquipo);
       if (error) { toast("Error al borrar: " + error.message, true); return; }
+      if (equipoEditandoId === b.dataset.borrarEquipo) cancelarEdicionEquipo();
       await cargarEquipos();
       await cargarEmpresas();
     });
@@ -660,10 +716,13 @@ $("btnExportarInventario").addEventListener("click", async () => {
 // ------------------------------------------------------------
 
 $("credEmpresaSelect").addEventListener("change", async (e) => {
+  cancelarEdicionCred();
   empresaCredActual = e.target.value || null;
   sincronizarEmpresaGlobal(empresaCredActual);
   await cargarCredenciales();
 });
+
+let credEditandoId = null;
 
 $("btnGuardarCredencial").addEventListener("click", async () => {
   $("credencialError").textContent = "";
@@ -671,20 +730,36 @@ $("btnGuardarCredencial").addEventListener("click", async () => {
   const servicio = $("credServicio").value.trim();
   if (!servicio) { $("credencialError").textContent = "Indica a qué servicio pertenece (ej: correo, router)."; return; }
 
-  const { error } = await sb.from("credenciales").insert({
+  const registro = {
     empresa_id: empresaCredActual,
     servicio,
     usuario: $("credUsuario").value.trim(),
-    password: $("credPassword").value,
     notas: $("credNotas").value.trim(),
-  });
+  };
+  const passwordNueva = $("credPassword").value;
+  if (!credEditandoId || passwordNueva) registro.password = passwordNueva;
+
+  const { error } = credEditandoId
+    ? await sb.from("credenciales").update(registro).eq("id", credEditandoId)
+    : await sb.from("credenciales").insert(registro);
   if (error) { $("credencialError").textContent = "Error al guardar: " + error.message; return; }
 
-  $("credServicio").value = ""; $("credUsuario").value = ""; $("credPassword").value = ""; $("credNotas").value = "";
-  toast("Credencial guardada.");
+  toast(credEditandoId ? "Credencial actualizada." : "Credencial guardada.");
+  cancelarEdicionCred();
   await cargarCredenciales();
   await cargarEmpresas();
 });
+
+function cancelarEdicionCred() {
+  credEditandoId = null;
+  $("credServicio").value = ""; $("credUsuario").value = ""; $("credPassword").value = ""; $("credNotas").value = "";
+  $("credPassword").placeholder = "";
+  $("credFormTitulo").textContent = "Nueva credencial";
+  $("btnGuardarCredencial").textContent = "Guardar credencial";
+  $("btnCancelarEdicionCred").style.display = "none";
+  $("credencialError").textContent = "";
+}
+$("btnCancelarEdicionCred").addEventListener("click", cancelarEdicionCred);
 
 async function cargarCredenciales() {
   const tbody = $("tablaCredenciales");
@@ -710,8 +785,12 @@ async function cargarCredenciales() {
         <button class="reveal-btn" data-toggle-pw>ver</button>
       </td>
       <td>${escapeHtml(r.notas)}</td>
-      <td class="actions-cell">${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-cred="${r.id}">Borrar</button>` : ""}</td>`;
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-cred="${r.id}">Editar</button>
+        ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-cred="${r.id}">Borrar</button>` : ""}
+      </td>`;
     tbody.appendChild(tr);
+    tr.dataset.credJson = JSON.stringify(r);
   });
 
   tbody.querySelectorAll("[data-toggle-pw]").forEach((btn) => {
@@ -724,10 +803,28 @@ async function cargarCredenciales() {
     });
   });
 
+  tbody.querySelectorAll("[data-editar-cred]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const r = JSON.parse(b.closest("tr").dataset.credJson);
+      credEditandoId = r.id;
+      $("credServicio").value = r.servicio || "";
+      $("credUsuario").value = r.usuario || "";
+      $("credPassword").value = "";
+      $("credPassword").placeholder = "Deja en blanco para no cambiarla";
+      $("credNotas").value = r.notas || "";
+      $("credFormTitulo").textContent = "Editar credencial";
+      $("btnGuardarCredencial").textContent = "Guardar cambios";
+      $("btnCancelarEdicionCred").style.display = "inline-block";
+      $("credencialError").textContent = "";
+    });
+  });
+
   document.querySelectorAll("[data-borrar-cred]").forEach((b) => {
     b.addEventListener("click", async () => {
+      if (!confirm("¿Borrar esta credencial?")) return;
       const { error } = await sb.from("credenciales").delete().eq("id", b.dataset.borrarCred);
       if (error) { toast("Error al borrar: " + error.message, true); return; }
+      if (credEditandoId === b.dataset.borrarCred) cancelarEdicionCred();
       await cargarCredenciales();
       await cargarEmpresas();
     });
@@ -1086,7 +1183,70 @@ function cancelarEdicionRouter() {
   $("btnGuardarRouter").textContent = "Guardar router";
   $("btnCancelarEdicionRouter").style.display = "none";
   $("routerError").textContent = "";
+  $("detectarInterfacesInfo").style.display = "none";
+  $("detectarInterfacesInfo").textContent = "";
 }
+
+// Se conecta de verdad al router (con los datos que haya en el
+// formulario en ese momento) y trae su lista real de interfaces, más
+// una sugerencia de cuál es la WAN y cuál la LAN — para no tener que
+// adivinar nombres como "ether1"/"bridge" que ese equipo en particular
+// puede no tener. Si está editando un router ya guardado y deja el
+// usuario/contraseña en blanco, usa los datos guardados de ese router.
+$("btnDetectarInterfaces").addEventListener("click", async () => {
+  const info = $("detectarInterfacesInfo");
+  const host = $("routerHost").value.trim();
+
+  if (!host && !routerEditandoId) {
+    info.style.display = "block";
+    info.textContent = "Escribe primero la IP o dominio del router.";
+    return;
+  }
+
+  const cuerpo = {
+    accion: "detectar_interfaces",
+    id: routerEditandoId || undefined,
+    host,
+    puerto: $("routerPuerto").value.trim() || "8728",
+    usuario: $("routerUsuario").value.trim(),
+    password: $("routerPassword").value,
+    ssl: $("routerSsl").checked,
+  };
+
+  $("btnDetectarInterfaces").disabled = true;
+  $("btnDetectarInterfaces").textContent = "Detectando...";
+  info.style.display = "block";
+  info.textContent = "Conectando al router para revisar sus interfaces...";
+
+  const { data, error } = await sb.functions.invoke("mikrotik-config", { body: cuerpo });
+
+  $("btnDetectarInterfaces").disabled = false;
+  $("btnDetectarInterfaces").textContent = "🔍 Detectar interfaces del router";
+
+  if (error || data?.error) {
+    info.textContent = "No se pudo detectar: " + (data?.error || error.message);
+    return;
+  }
+
+  const nombresInterfaces = (data.interfaces || []).map((i) => i.nombre).join(", ") || "(el router no reportó ninguna)";
+  const partes = [`Interfaces encontradas en el router: ${nombresInterfaces}.`];
+
+  if (data.wan_sugerida) {
+    $("routerWan").value = data.wan_sugerida;
+    partes.push(`WAN sugerida: "${data.wan_sugerida}" (ya la puse en el campo).`);
+  } else {
+    partes.push("No se pudo adivinar cuál es la WAN — revísala a mano en la lista de arriba.");
+  }
+
+  if (data.lan_sugerida) {
+    $("routerLan").value = data.lan_sugerida;
+    partes.push(`LAN sugerida: "${data.lan_sugerida}" (ya la puse en el campo).`);
+  } else {
+    partes.push("No se pudo adivinar cuál es la LAN — revísala a mano en la lista de arriba.");
+  }
+
+  info.textContent = partes.join(" ");
+});
 
 async function cargarRoutersConfigurados() {
   const tbody = $("tablaRouters");
@@ -1335,24 +1495,42 @@ $("btnGuardarNombrePersonal").addEventListener("click", async () => {
   toast("Nombre guardado.");
 });
 
+let personalEditandoId = null;
+
 $("btnGuardarPersonal").addEventListener("click", async () => {
   $("personalError").textContent = "";
   const servicio = $("persServicio").value.trim();
   if (!servicio) { $("personalError").textContent = "Indica a qué servicio pertenece (ej: correo personal)."; return; }
 
-  const { error } = await sb.from("credenciales_personales").insert({
+  const registro = {
     user_id: sesion.user.id,
     servicio,
     usuario: $("persUsuario").value.trim(),
-    password: $("persPassword").value,
     notas: $("persNotas").value.trim(),
-  });
+  };
+  const passwordNueva = $("persPassword").value;
+  if (!personalEditandoId || passwordNueva) registro.password = passwordNueva;
+
+  const { error } = personalEditandoId
+    ? await sb.from("credenciales_personales").update(registro).eq("id", personalEditandoId)
+    : await sb.from("credenciales_personales").insert(registro);
   if (error) { $("personalError").textContent = "Error al guardar: " + error.message; return; }
 
-  $("persServicio").value = ""; $("persUsuario").value = ""; $("persPassword").value = ""; $("persNotas").value = "";
-  toast("Guardado.");
+  toast(personalEditandoId ? "Actualizado." : "Guardado.");
+  cancelarEdicionPersonal();
   await cargarPersonal();
 });
+
+function cancelarEdicionPersonal() {
+  personalEditandoId = null;
+  $("persServicio").value = ""; $("persUsuario").value = ""; $("persPassword").value = ""; $("persNotas").value = "";
+  $("persPassword").placeholder = "";
+  $("personalFormTitulo").textContent = "Nueva contraseña personal";
+  $("btnGuardarPersonal").textContent = "Guardar";
+  $("btnCancelarEdicionPersonal").style.display = "none";
+  $("personalError").textContent = "";
+}
+$("btnCancelarEdicionPersonal").addEventListener("click", cancelarEdicionPersonal);
 
 async function cargarPersonal() {
   const tbody = $("tablaPersonal");
@@ -1376,8 +1554,12 @@ async function cargarPersonal() {
         <button class="reveal-btn" data-toggle-pw>ver</button>
       </td>
       <td>${escapeHtml(r.notas)}</td>
-      <td class="actions-cell"><button class="icon-btn danger" data-borrar-personal="${r.id}">Borrar</button></td>`;
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-personal="${r.id}">Editar</button>
+        <button class="icon-btn danger" data-borrar-personal="${r.id}">Borrar</button>
+      </td>`;
     tbody.appendChild(tr);
+    tr.dataset.personalJson = JSON.stringify(r);
   });
 
   tbody.querySelectorAll("[data-toggle-pw]").forEach((btn) => {
@@ -1390,10 +1572,28 @@ async function cargarPersonal() {
     });
   });
 
+  tbody.querySelectorAll("[data-editar-personal]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const r = JSON.parse(b.closest("tr").dataset.personalJson);
+      personalEditandoId = r.id;
+      $("persServicio").value = r.servicio || "";
+      $("persUsuario").value = r.usuario || "";
+      $("persPassword").value = "";
+      $("persPassword").placeholder = "Deja en blanco para no cambiarla";
+      $("persNotas").value = r.notas || "";
+      $("personalFormTitulo").textContent = "Editar contraseña personal";
+      $("btnGuardarPersonal").textContent = "Guardar cambios";
+      $("btnCancelarEdicionPersonal").style.display = "inline-block";
+      $("personalError").textContent = "";
+    });
+  });
+
   document.querySelectorAll("[data-borrar-personal]").forEach((b) => {
     b.addEventListener("click", async () => {
+      if (!confirm("¿Borrar esta contraseña?")) return;
       const { error } = await sb.from("credenciales_personales").delete().eq("id", b.dataset.borrarPersonal);
       if (error) { toast("Error al borrar: " + error.message, true); return; }
+      if (personalEditandoId === b.dataset.borrarPersonal) cancelarEdicionPersonal();
       await cargarPersonal();
     });
   });

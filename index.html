@@ -663,13 +663,14 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card" id="empresaFormCard" style="display:none;">
-        <h3>Nueva empresa</h3>
+        <h3 id="empresaFormTitulo">Nueva empresa</h3>
         <div class="toolbar">
           <div class="field">
             <label for="nuevaEmpresaNombre">Nombre</label>
             <input type="text" id="nuevaEmpresaNombre" placeholder="Ej: Finca San Cayetano" />
           </div>
           <button class="btn-primary" style="margin-top:0; width:auto;" id="btnCrearEmpresa">Agregar</button>
+          <button class="btn-secondary" style="margin-top:0; width:auto; display:none;" id="btnCancelarEdicionEmpresa" type="button">Cancelar</button>
         </div>
       </div>
 
@@ -704,7 +705,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
-        <h3>Registrar equipo</h3>
+        <h3 id="equipoFormTitulo">Registrar equipo</h3>
         <div class="form-grid">
           <div>
             <label for="eqTipo">Tipo de equipo</label>
@@ -736,7 +737,10 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="full"><label for="eqComentarios">Comentarios</label><textarea id="eqComentarios" rows="2"></textarea></div>
           <div><label for="eqRegistradoPor">Registrado por</label><input id="eqRegistradoPor" /></div>
         </div>
-        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnGuardarEquipo">Guardar equipo</button>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarEquipo">Guardar equipo</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionEquipo" type="button">Cancelar</button>
+        </div>
         <div class="error-msg" id="equipoError"></div>
       </div>
 
@@ -775,14 +779,17 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
-        <h3>Nueva credencial</h3>
+        <h3 id="credFormTitulo">Nueva credencial</h3>
         <div class="form-grid">
           <div><label for="credServicio">Servicio</label><input id="credServicio" placeholder="Ej: Correo administrativo" /></div>
           <div><label for="credUsuario">Usuario</label><input id="credUsuario" /></div>
           <div><label for="credPassword">Contraseña</label><input id="credPassword" /></div>
           <div class="full"><label for="credNotas">Notas</label><textarea id="credNotas" rows="2"></textarea></div>
         </div>
-        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnGuardarCredencial">Guardar credencial</button>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarCredencial">Guardar credencial</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionCred" type="button">Cancelar</button>
+        </div>
         <div class="error-msg" id="credencialError"></div>
       </div>
 
@@ -839,6 +846,10 @@ tbody tr:last-child td { border-bottom: none; }
           <div><label for="routerWan">Interfaz WAN</label><input id="routerWan" placeholder="Ej: ether1" value="ether1" /></div>
           <div><label for="routerLan">Interfaz LAN</label><input id="routerLan" placeholder="Ej: bridge" value="bridge" /></div>
         </div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button class="btn-secondary" style="width:auto; margin-top:0;" id="btnDetectarInterfaces" type="button">🔍 Detectar interfaces del router</button>
+        </div>
+        <p class="sub" id="detectarInterfacesInfo" style="margin-top:10px; display:none;"></p>
         <div style="display:flex; gap:10px; margin-top:18px;">
           <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarRouter">Guardar router</button>
           <button class="btn-secondary" style="display:none;" id="btnCancelarEdicionRouter">Cancelar</button>
@@ -920,14 +931,17 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
-        <h3>Nueva contraseña personal</h3>
+        <h3 id="personalFormTitulo">Nueva contraseña personal</h3>
         <div class="form-grid">
           <div><label for="persServicio">Servicio</label><input id="persServicio" placeholder="Ej: Correo personal" /></div>
           <div><label for="persUsuario">Usuario</label><input id="persUsuario" /></div>
           <div><label for="persPassword">Contraseña</label><input id="persPassword" /></div>
           <div class="full"><label for="persNotas">Notas</label><textarea id="persNotas" rows="2"></textarea></div>
         </div>
-        <button class="btn-primary" style="width:auto; margin-top:18px;" id="btnGuardarPersonal">Guardar</button>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarPersonal">Guardar</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionPersonal" type="button">Cancelar</button>
+        </div>
         <div class="error-msg" id="personalError"></div>
       </div>
 
