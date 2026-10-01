@@ -1,0 +1,12 @@
+# Nunca subir esto: son las credenciales de la sesion de WhatsApp. Quien
+# tenga esta carpeta puede mandar y leer mensajes como si fuera el
+# WhatsApp de la empresa, sin necesidad de volver a escanear el QR.
+auth_info_baileys/
+
+# Dependencias instaladas (se reinstalan con "npm install") y el
+# archivo con la clave secreta real.
+node_modules/
+.env
+
+# Logs sueltos si los llegas a generar.
+*.log
