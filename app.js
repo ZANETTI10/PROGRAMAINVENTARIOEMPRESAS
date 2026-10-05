@@ -305,7 +305,7 @@ function pintarResumenDashboard(items) {
   });
 
   const html = `
-    <div class="dash-resumen-item dr-ok"><div class="dr-icon">✓</div><span class="dr-num">${ok}</span><span class="dr-label">Sin problemas</span></div>
+    <div class="dash-resumen-item dr-ok"><div class="dr-icon">✓</div><span class="dr-num">${ok}</span><span class="dr-label">En buen estado</span></div>
     <div class="dash-resumen-item dr-warn"><div class="dr-icon">⚠️</div><span class="dr-num">${advertencia}</span><span class="dr-label">Con advertencias</span></div>
     <div class="dash-resumen-item dr-bad"><div class="dr-icon">⛔</div><span class="dr-num">${alerta}</span><span class="dr-label">Necesitan atención</span></div>
     <div class="dash-resumen-item dr-muted"><div class="dr-icon">○</div><span class="dr-num">${sinRouter}</span><span class="dr-label">Sin router</span></div>`;
@@ -445,12 +445,12 @@ function pintarDashCard(item) {
   const estadoClase = nivel === "alerta" ? "pill-bad" : (nivel === "advertencia" ? "pill-warn" : "pill-ok");
   const estadoTxt = fuera > 0
     ? `${fuera} de ${routers.length} sin conexión`
-    : (nivel === "ok" ? "Todo bien" : `${alertas + advertencias} hallazgo${(alertas + advertencias) > 1 ? "s" : ""}`);
+    : (nivel === "ok" ? "En buen estado" : `${alertas + advertencias} hallazgo${(alertas + advertencias) > 1 ? "s" : ""}`);
 
   const badges = [];
   if (alertas > 0) badges.push(`<span class="pill pill-bad">⛔ ${alertas}</span>`);
   if (advertencias > 0) badges.push(`<span class="pill pill-warn">⚠️ ${advertencias}</span>`);
-  if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ Sin problemas activos</span>`);
+  if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ En buen estado</span>`);
   if (eventosLog > 0) badges.push(`<span class="pill" title="Líneas del log del router, pueden ser de hace días">📋 ${eventosLog} en el log</span>`);
   if (srv && srv.total > 0) {
     if (srv.caidos > 0) {
