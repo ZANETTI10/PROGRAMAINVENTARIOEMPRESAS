@@ -838,6 +838,10 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="toolbar">
           <div class="field"><label for="srvNombre">Nombre</label><input id="srvNombre" placeholder="Ej: Servidor ERP" /></div>
           <div class="field"><label for="srvIp">IP (dentro de la red del cliente)</label><input id="srvIp" placeholder="Ej: 192.168.88.50" /></div>
+          <div class="field" id="srvRouterField" style="display:none;">
+            <label for="srvRouter">Router que lo revisa</label>
+            <select id="srvRouter"></select>
+          </div>
           <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarServidor">Agregar</button>
           <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionServidor" type="button">Cancelar</button>
         </div>

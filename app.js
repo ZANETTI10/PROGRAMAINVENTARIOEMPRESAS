@@ -915,6 +915,7 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
 
 let empresaMonitoreoActual = null;
 let routerEditandoId = null;
+let routersDeEmpresaActual = [];
 
 $("monEmpresaSelect").addEventListener("change", async (e) => {
   empresaMonitoreoActual = e.target.value || null;
@@ -925,8 +926,14 @@ $("monEmpresaSelect").addEventListener("change", async (e) => {
 
   cancelarEdicionServidor();
   $("servidoresCard").style.display = empresaMonitoreoActual ? "block" : "none";
-  if (empresaMonitoreoActual) await cargarServidores();
-  else $("servidoresGrid").innerHTML = "";
+  if (empresaMonitoreoActual) {
+    await cargarRoutersDeEmpresaActual();
+    await cargarServidores();
+  } else {
+    routersDeEmpresaActual = [];
+    actualizarSelectorRouterServidor();
+    $("servidoresGrid").innerHTML = "";
+  }
 
   if (perfil.rol === "admin") {
     // El panel de "agregar/editar router" arranca siempre colapsado: por
@@ -938,6 +945,38 @@ $("monEmpresaSelect").addEventListener("change", async (e) => {
     if (empresaMonitoreoActual) await cargarRoutersConfigurados();
   }
 });
+
+// Trae los MikroTik de la empresa actual (solo id+nombre, cualquier
+// técnico puede verlos) para poder elegir, al agregar un servidor, cuál
+// router debe revisarlo — necesario cuando una empresa tiene más de uno
+// (ej. Tropical: Oficina Admin + Bodega, cada uno con sus propios
+// equipos). Si la empresa solo tiene un router, el selector se oculta y
+// ese router queda elegido automáticamente.
+async function cargarRoutersDeEmpresaActual() {
+  if (!empresaMonitoreoActual) { routersDeEmpresaActual = []; actualizarSelectorRouterServidor(); return; }
+  const { data, error } = await sb.functions.invoke("mikrotik-servidores", {
+    body: { accion: "listar_routers", empresa_id: empresaMonitoreoActual },
+  });
+  routersDeEmpresaActual = (!error && !data?.error && data?.routers) ? data.routers : [];
+  actualizarSelectorRouterServidor();
+}
+
+function actualizarSelectorRouterServidor() {
+  const campo = $("srvRouterField");
+  const select = $("srvRouter");
+  if (!campo || !select) return;
+
+  if (routersDeEmpresaActual.length < 2) {
+    campo.style.display = "none";
+    select.innerHTML = routersDeEmpresaActual.length === 1
+      ? `<option value="${routersDeEmpresaActual[0].id}">${escapeHtml(routersDeEmpresaActual[0].nombre)}</option>`
+      : "";
+    return;
+  }
+
+  campo.style.display = "block";
+  select.innerHTML = routersDeEmpresaActual.map((r) => `<option value="${r.id}">${escapeHtml(r.nombre)}</option>`).join("");
+}
 
 function cerrarConfigRouter() {
   $("monConfigCard").style.display = "none";
@@ -994,9 +1033,9 @@ $("btnVerificarMonitoreo").addEventListener("click", async () => {
   if (!servidoresResp?.error && srvData && !srvData.error && srvData.servidores) {
     const grid = $("servidoresGrid");
     $("servidoresEmpty").style.display = srvData.servidores.length ? "none" : "block";
-    grid.innerHTML = srvData.servidores
-      .map((s) => pintarServidorCard({ id: s.id, nombre: s.nombre, ip: s.ip, estado: s }))
-      .join("");
+    grid.innerHTML = pintarServidoresAgrupados(
+      srvData.servidores.map((s) => ({ id: s.id, nombre: s.nombre, ip: s.ip, router_id: s.router_id, estado: s }))
+    );
     engancharAccionesServidores();
   } else {
     await cargarServidores();
@@ -1247,6 +1286,7 @@ $("btnGuardarRouter").addEventListener("click", async () => {
   toast(routerEditandoId ? "Router actualizado." : "Router guardado.");
   cancelarEdicionRouter();
   await cargarRoutersConfigurados();
+  await cargarRoutersDeEmpresaActual();
 });
 
 $("btnCancelarEdicionRouter").addEventListener("click", cancelarEdicionRouter);
@@ -1404,6 +1444,7 @@ async function cargarRoutersConfigurados() {
       toast("Router eliminado.");
       cancelarEdicionRouter();
       await cargarRoutersConfigurados();
+      await cargarRoutersDeEmpresaActual();
     });
   });
 }
@@ -1458,6 +1499,35 @@ function pintarServidorCard(srv) {
     </div>`;
 }
 
+// Cuando la empresa tiene más de un router, los servidores se muestran
+// agrupados bajo el MikroTik que los revisa (ej. "Oficina Admin" /
+// "Bodega" en Tropical) — reutiliza el mismo estilo de encabezado que ya
+// se usa para agrupar interfaces ("mon-if-group-label"). Con un solo
+// router no tiene sentido mostrar el encabezado, así que queda igual que
+// antes: una sola lista plana.
+function pintarServidoresAgrupados(servidores) {
+  if (routersDeEmpresaActual.length < 2) {
+    return servidores.map(pintarServidorCard).join("");
+  }
+
+  const nombrePorRouter = new Map(routersDeEmpresaActual.map((r) => [r.id, r.nombre]));
+  const grupos = new Map();
+  for (const s of servidores) {
+    const clave = s.router_id || "__sin_router__";
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(s);
+  }
+
+  const orden = [...routersDeEmpresaActual.map((r) => r.id), "__sin_router__"];
+  return orden
+    .filter((clave) => grupos.has(clave))
+    .map((clave) => {
+      const titulo = clave === "__sin_router__" ? "Sin router asignado" : (nombrePorRouter.get(clave) || "Router");
+      return `<div class="mon-if-group-label">🛠️ ${escapeHtml(titulo)}</div>` + grupos.get(clave).map(pintarServidorCard).join("");
+    })
+    .join("");
+}
+
 async function cargarServidores() {
   const grid = $("servidoresGrid");
   if (!grid || !empresaMonitoreoActual) return;
@@ -1474,11 +1544,12 @@ async function cargarServidores() {
     id: s.id,
     nombre: s.nombre,
     ip: s.ip,
+    router_id: s.router_id,
     estado: Array.isArray(s.servidores_estado) ? s.servidores_estado[0] : s.servidores_estado,
   }));
 
   $("servidoresEmpty").style.display = servidores.length ? "none" : "block";
-  grid.innerHTML = servidores.map(pintarServidorCard).join("");
+  grid.innerHTML = pintarServidoresAgrupados(servidores);
   engancharAccionesServidores();
 }
 
@@ -1492,6 +1563,7 @@ function engancharAccionesServidores() {
       servidorEditandoId = srv.id;
       $("srvNombre").value = srv.nombre || "";
       $("srvIp").value = srv.ip || "";
+      if (srv.router_id) $("srvRouter").value = srv.router_id;
       $("btnGuardarServidor").textContent = "Guardar cambios";
       $("btnCancelarEdicionServidor").style.display = "inline-block";
       $("servidorError").textContent = "";
@@ -1514,6 +1586,7 @@ function cancelarEdicionServidor() {
   servidorEditandoId = null;
   $("srvNombre").value = "";
   $("srvIp").value = "";
+  if (routersDeEmpresaActual.length) $("srvRouter").value = routersDeEmpresaActual[0].id;
   $("btnGuardarServidor").textContent = "Agregar";
   $("btnCancelarEdicionServidor").style.display = "none";
   $("servidorError").textContent = "";
@@ -1527,13 +1600,15 @@ $("btnGuardarServidor").addEventListener("click", async () => {
 
   const nombre = $("srvNombre").value.trim();
   const ip = $("srvIp").value.trim();
+  const routerId = $("srvRouter").value || null;
   if (!nombre) { $("servidorError").textContent = "Escribe un nombre para el servidor."; return; }
   if (!ip) { $("servidorError").textContent = "Escribe la IP del servidor."; return; }
+  if (routersDeEmpresaActual.length > 1 && !routerId) { $("servidorError").textContent = "Elige cuál router lo debe revisar."; return; }
 
   $("btnGuardarServidor").disabled = true;
   const { error } = servidorEditandoId
-    ? await sb.from("servidores").update({ nombre, ip }).eq("id", servidorEditandoId)
-    : await sb.from("servidores").insert({ nombre, ip, empresa_id: empresaMonitoreoActual });
+    ? await sb.from("servidores").update({ nombre, ip, router_id: routerId }).eq("id", servidorEditandoId)
+    : await sb.from("servidores").insert({ nombre, ip, empresa_id: empresaMonitoreoActual, router_id: routerId });
   $("btnGuardarServidor").disabled = false;
 
   if (error) { $("servidorError").textContent = "Error: " + error.message; return; }
