@@ -179,7 +179,10 @@ async function cargarDashboard() {
   $("btnActualizarDashboard").textContent = "Actualizando…";
   $("dashMensaje").style.display = "none";
 
-  const { data, error } = await sb.functions.invoke("mikrotik-estado", { body: { todas: true } });
+  const [{ data, error }, serversRes] = await Promise.all([
+    sb.functions.invoke("mikrotik-estado", { body: { todas: true } }),
+    sb.from("servidores").select("id, empresa_id, servidores_estado(en_linea, ultima_verificacion)"),
+  ]);
 
   $("btnActualizarDashboard").disabled = false;
   $("btnActualizarDashboard").textContent = "Actualizar estado";
@@ -192,6 +195,23 @@ async function cargarDashboard() {
   }
 
   let items = data.empresas || [];
+
+  // Estado de los servidores vigilados de cada empresa (tabla
+  // "servidores_estado", la llena la tarea programada cada 10 min o el
+  // botón "Verificar ahora" de Monitoreo) — se junta aquí por empresa
+  // para poder mostrarlo también en el Dashboard general.
+  const servidoresPorEmpresa = new Map();
+  (serversRes.data || []).forEach((s) => {
+    const estado = Array.isArray(s.servidores_estado) ? s.servidores_estado[0] : s.servidores_estado;
+    const entry = servidoresPorEmpresa.get(s.empresa_id) || { total: 0, enLinea: 0, caidos: 0, sinDatos: 0 };
+    entry.total++;
+    if (!estado || estado.ultima_verificacion == null) entry.sinDatos++;
+    else if (estado.en_linea) entry.enLinea++;
+    else entry.caidos++;
+    servidoresPorEmpresa.set(s.empresa_id, entry);
+  });
+  items = items.map((item) => ({ ...item, servidores: servidoresPorEmpresa.get(item.empresa_id) || null }));
+
   if (items.length === 0) {
     $("dashMensaje").style.display = "block";
     $("dashMensaje").textContent = "Todavía no hay empresas registradas.";
@@ -250,7 +270,8 @@ async function cargarDashboard() {
 // pasando ahora mismo).
 function estadoEmpresaDash(item) {
   const routers = item.routers || [];
-  if (routers.length === 0) return { nivel: "sinRouter", alertas: 0, advertencias: 0, fuera: 0, eventosLog: 0 };
+  const srvCaidos = item.servidores ? item.servidores.caidos : 0;
+  if (routers.length === 0) return { nivel: "sinRouter", alertas: 0, advertencias: 0, fuera: 0, eventosLog: 0, srvCaidos };
 
   let alertas = 0, advertencias = 0, fuera = 0, eventosLog = 0;
   routers.forEach((r) => {
@@ -261,11 +282,14 @@ function estadoEmpresaDash(item) {
     });
   });
 
+  // Un servidor vigilado que dejó de responder es tan grave como un
+  // router caído, así que también sube la tarjeta a "necesita atención"
+  // (no se queda solo como una insignia informativa aparte).
   let nivel = "ok";
-  if (fuera > 0 || alertas > 0) nivel = "alerta";
+  if (fuera > 0 || alertas > 0 || srvCaidos > 0) nivel = "alerta";
   else if (advertencias > 0) nivel = "advertencia";
 
-  return { nivel, alertas, advertencias, fuera, eventosLog };
+  return { nivel, alertas, advertencias, fuera, eventosLog, srvCaidos };
 }
 
 // Franja de resumen arriba del grid: cuenta cuántas empresas están bien,
@@ -384,8 +408,31 @@ async function sincronizarHoraTodos(boton) {
   }
 }
 
+// Franja chiquita debajo de cada router del Dashboard con el estado de
+// Internet (WAN), WiFi (antenas del router, si tiene) y LAN — para ver
+// de un vistazo cuál de los tres está fallando, sin tener que entrar a
+// Monitoreo a revisar interfaz por interfaz.
+function pintarRedMiniPillsDash(r) {
+  const pill = (clase, texto) => `<span class="dash-net-pill ${clase}">${texto}</span>`;
+
+  const internet = (r.wan && !r.wan.error)
+    ? pill(r.wan.activa ? "dash-net-ok" : "dash-net-bad", "🌐 Internet")
+    : pill("dash-net-bad", "🌐 Internet");
+
+  const wifi = r.wifi
+    ? pill(r.wifi.activas === r.wifi.total ? "dash-net-ok" : "dash-net-bad", `📶 WiFi ${r.wifi.activas}/${r.wifi.total}`)
+    : pill("dash-net-muted", "📶 Sin WiFi");
+
+  const lan = (r.lan && !r.lan.error)
+    ? pill(r.lan.activa ? "dash-net-ok" : "dash-net-bad", "🏠 LAN")
+    : pill("dash-net-bad", "🏠 LAN");
+
+  return `<div class="dash-net-row">${internet}${wifi}${lan}</div>`;
+}
+
 function pintarDashCard(item) {
   const routers = item.routers || [];
+  const srv = item.servidores;
 
   if (routers.length === 0) {
     return `
@@ -407,6 +454,15 @@ function pintarDashCard(item) {
   if (advertencias > 0) badges.push(`<span class="pill pill-warn">⚠️ ${advertencias}</span>`);
   if (badges.length === 0 && fuera === 0) badges.push(`<span class="pill pill-ok">✓ Sin problemas activos</span>`);
   if (eventosLog > 0) badges.push(`<span class="pill" title="Líneas del log del router, pueden ser de hace días">📋 ${eventosLog} en el log</span>`);
+  if (srv && srv.total > 0) {
+    if (srv.caidos > 0) {
+      badges.push(`<span class="pill pill-bad">🖥️ ${srv.caidos}/${srv.total} servidor${srv.total > 1 ? "es" : ""} caído${srv.caidos > 1 ? "s" : ""}</span>`);
+    } else if (srv.enLinea > 0) {
+      badges.push(`<span class="pill pill-ok">🖥️ ${srv.enLinea}/${srv.total} servidor${srv.total > 1 ? "es" : ""} encendido${srv.enLinea > 1 ? "s" : ""}</span>`);
+    } else {
+      badges.push(`<span class="pill pill-warn">🖥️ servidores sin revisar</span>`);
+    }
+  }
 
   // Fila por router: punto verde/rojo + nombre + mini-stats (CPU/RAM/temp)
   // cuando está conectado, para ver salud del equipo sin entrar a Monitoreo.
@@ -449,7 +505,8 @@ function pintarDashCard(item) {
         ${cpuRing}
         ${btnHora}
         ${btnReiniciar}
-      </div>`;
+      </div>
+      ${pintarRedMiniPillsDash(r)}`;
   }).join("");
 
   return `
