@@ -417,9 +417,15 @@ function pintarRedMiniPillsDash(r) {
     ? pill(r.wan.activa ? "dash-net-ok" : "dash-net-bad", "🌐 Internet")
     : pill("dash-net-bad", "🌐 Internet");
 
-  const wifi = r.wifi
-    ? pill(r.wifi.activas === r.wifi.total ? "dash-net-ok" : "dash-net-bad", `📶 WiFi ${r.wifi.activas}/${r.wifi.total}`)
-    : pill("dash-net-muted", "📶 Sin WiFi");
+  // Las antenas que el técnico dejó deshabilitadas a propósito (no todas
+  // las "wlan" de un router están en uso) no cuentan como una falla — si
+  // ninguna está en uso es simplemente "WiFi apagado", no una alarma roja.
+  const wifi = (() => {
+    if (!r.wifi) return pill("dash-net-muted", "📶 Sin WiFi");
+    const enUso = r.wifi.total - r.wifi.deshabilitadas;
+    if (enUso === 0) return pill("dash-net-muted", "📶 WiFi apagado");
+    return pill(r.wifi.activas === enUso ? "dash-net-ok" : "dash-net-bad", `📶 WiFi ${r.wifi.activas}/${enUso}`);
+  })();
 
   const lan = (r.lan && !r.lan.error)
     ? pill(r.lan.activa ? "dash-net-ok" : "dash-net-bad", "🏠 LAN")
