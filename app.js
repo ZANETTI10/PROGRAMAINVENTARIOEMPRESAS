@@ -181,7 +181,7 @@ async function cargarDashboard() {
 
   const [{ data, error }, serversRes] = await Promise.all([
     sb.functions.invoke("mikrotik-estado", { body: { todas: true } }),
-    sb.from("servidores").select("id, empresa_id, servidores_estado(en_linea, ultima_verificacion)"),
+    sb.functions.invoke("mikrotik-servidores", { body: { accion: "verificar_todo" } }),
   ]);
 
   $("btnActualizarDashboard").disabled = false;
@@ -196,19 +196,17 @@ async function cargarDashboard() {
 
   let items = data.empresas || [];
 
-  // Estado de los servidores vigilados de cada empresa (tabla
-  // "servidores_estado", la llena la tarea programada cada 10 min o el
-  // botón "Verificar ahora" de Monitoreo) — se junta aquí por empresa
-  // para poder mostrarlo también en el Dashboard general.
+  // Estado de los servidores vigilados de cada empresa: esto SÍ hizo
+  // ping en vivo a cada uno (vía el router de esa empresa) justo ahora,
+  // no es el último dato guardado — por eso "Actualizar estado" también
+  // actualiza si un servidor está encendido o apagado, no solo el router.
   const servidoresPorEmpresa = new Map();
-  (serversRes.data || []).forEach((s) => {
-    const estado = Array.isArray(s.servidores_estado) ? s.servidores_estado[0] : s.servidores_estado;
-    const entry = servidoresPorEmpresa.get(s.empresa_id) || { total: 0, enLinea: 0, caidos: 0, sinDatos: 0 };
-    entry.total++;
-    if (!estado || estado.ultima_verificacion == null) entry.sinDatos++;
-    else if (estado.en_linea) entry.enLinea++;
-    else entry.caidos++;
-    servidoresPorEmpresa.set(s.empresa_id, entry);
+  (serversRes.data?.empresas || []).forEach((emp) => {
+    const lista = emp.servidores || [];
+    if (lista.length === 0) return;
+    const entry = { total: lista.length, enLinea: 0, caidos: 0, sinDatos: 0 };
+    lista.forEach((s) => { if (s.en_linea) entry.enLinea++; else entry.caidos++; });
+    servidoresPorEmpresa.set(emp.empresa_id, entry);
   });
   items = items.map((item) => ({ ...item, servidores: servidoresPorEmpresa.get(item.empresa_id) || null }));
 
