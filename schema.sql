@@ -233,3 +233,93 @@ create policy equipos_tokens_admin on equipos_tokens for all
 -- sin reportarse).
 alter table equipos add column if not exists origen text not null default 'manual' check (origen in ('manual','agente'));
 alter table equipos add column if not exists actualizado_en timestamptz;
+
+-- ------------------------------------------------------------
+-- Servidores vigilados: equipos con IP fija dentro de la red de una
+-- empresa (un servidor de verdad, un NVR, lo que sea) a los que se les
+-- hace ping DESDE el router MikroTik de esa empresa — tanto al dar clic
+-- en "Verificar ahora" como solo, cada 10 minutos, vía una tarea
+-- programada (pg_cron) que llama a la Edge Function "mikrotik-servidores".
+-- Igual que con equipos: cualquier usuario logueado puede ver/agregar/
+-- editar; solo el admin borra.
+-- ------------------------------------------------------------
+create table if not exists servidores (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references empresas(id) on delete cascade,
+  nombre text not null,
+  ip text not null,
+  created_at timestamptz default now()
+);
+
+alter table servidores enable row level security;
+
+drop policy if exists servidores_select on servidores;
+create policy servidores_select on servidores for select
+  using (auth.role() = 'authenticated');
+
+drop policy if exists servidores_insert on servidores;
+create policy servidores_insert on servidores for insert
+  with check (auth.role() = 'authenticated');
+
+drop policy if exists servidores_update on servidores;
+create policy servidores_update on servidores for update
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+drop policy if exists servidores_delete on servidores;
+create policy servidores_delete on servidores for delete
+  using (is_admin());
+
+-- Último estado conocido de cada servidor. Solo lo escribe la Edge
+-- Function (con la llave service_role) — de ahí que no tenga políticas
+-- de insert/update/delete: nadie puede tocarla directo desde el navegador.
+create table if not exists servidores_estado (
+  servidor_id uuid primary key references servidores(id) on delete cascade,
+  en_linea boolean,
+  latencia_ms integer,
+  ultima_verificacion timestamptz default now(),
+  cambiado_en timestamptz default now()
+);
+
+alter table servidores_estado enable row level security;
+
+drop policy if exists servidores_estado_select on servidores_estado;
+create policy servidores_estado_select on servidores_estado for select
+  using (auth.role() = 'authenticated');
+
+-- Revisión automática cada 10 minutos: pg_cron llama por HTTP (pg_net)
+-- a la Edge Function "mikrotik-servidores" con { accion: "revisar_todo" }.
+-- Esto YA se corrió una vez directo en el proyecto (no hace falta
+-- repetirlo), se deja aquí solo como referencia de cómo quedó armado:
+--
+-- create extension if not exists pg_cron with schema cron;
+-- create extension if not exists pg_net;
+-- grant usage on schema cron to postgres;
+-- grant usage on schema net to postgres;
+--
+-- select cron.schedule(
+--   'revisar-servidores-cada-10-min',
+--   '*/10 * * * *',
+--   $cron$
+--   select net.http_post(
+--     url := '<URL_DEL_PROYECTO>/functions/v1/mikrotik-servidores',
+--     headers := jsonb_build_object(
+--       'Content-Type', 'application/json',
+--       'Authorization', 'Bearer <ANON_KEY>', -- la misma que va en config.js, no es secreta
+--       'x-verificacion-key', '<VERIFICACION_SECRETO>' -- debe coincidir con el secreto de la Edge Function
+--     ),
+--     body := jsonb_build_object('accion', 'revisar_todo')
+--   );
+--   $cron$
+-- );
+--
+-- Para los avisos por WhatsApp cuando un servidor cambia de estado, la
+-- función "mikrotik-servidores" necesita estas variables de entorno
+-- (Supabase -> Edge Functions -> Secrets) — mientras no existan, el
+-- aviso simplemente se omite y todo lo demás sigue funcionando igual:
+--   VERIFICACION_SECRETO       -> el mismo valor que va en el header
+--                                 "x-verificacion-key" de la tarea de arriba.
+--   N8N_ALERTA_WEBHOOK_URL     -> URL de un Webhook nuevo en n8n, dedicado
+--                                 a esta alerta (-> nodo HTTP Request que
+--                                 llame al endpoint /enviar del wpp-bridge).
+--   ALERTA_WHATSAPP_NUMERO     -> el número de WhatsApp que debe recibir
+--                                 el aviso, ej: "573001234567".

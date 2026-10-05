@@ -826,6 +826,20 @@ tbody tr:last-child td { border-bottom: none; }
       <p class="empty-state" id="monMensaje" style="padding:14px 0; text-align:left;">Selecciona una empresa arriba.</p>
       <div id="monResultado"></div>
 
+      <div class="card" id="servidoresCard" style="display:none;">
+        <h3>Servidores vigilados</h3>
+        <p class="sub" style="margin:-10px 0 16px;">Se revisan solos cada 10 minutos haciendo ping desde el router de esta empresa — y también cada vez que das clic en "Verificar ahora" arriba.</p>
+        <div class="toolbar">
+          <div class="field"><label for="srvNombre">Nombre</label><input id="srvNombre" placeholder="Ej: Servidor ERP" /></div>
+          <div class="field"><label for="srvIp">IP (dentro de la red del cliente)</label><input id="srvIp" placeholder="Ej: 192.168.88.50" /></div>
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarServidor">Agregar</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionServidor" type="button">Cancelar</button>
+        </div>
+        <div class="error-msg" id="servidorError"></div>
+        <div class="mon-conn-grid" id="servidoresGrid"></div>
+        <p class="empty-state" id="servidoresEmpty" style="display:none;">Todavía no hay servidores registrados para vigilar en esta empresa.</p>
+      </div>
+
       <button class="mon-toggle" id="btnToggleConfigRouter" type="button" style="display:none;">
         <span class="chev">▾</span> <span id="btnToggleConfigRouterTexto">Agregar / configurar router</span>
       </button>

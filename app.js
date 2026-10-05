@@ -862,6 +862,11 @@ $("monEmpresaSelect").addEventListener("change", async (e) => {
   $("monMensaje").style.display = "block";
   $("monMensaje").textContent = empresaMonitoreoActual ? "Da clic en \"Verificar ahora\" para ver el estado." : "Selecciona una empresa arriba.";
 
+  cancelarEdicionServidor();
+  $("servidoresCard").style.display = empresaMonitoreoActual ? "block" : "none";
+  if (empresaMonitoreoActual) await cargarServidores();
+  else $("servidoresGrid").innerHTML = "";
+
   if (perfil.rol === "admin") {
     // El panel de "agregar/editar router" arranca siempre colapsado: por
     // defecto solo interesa VER el estado, y este formulario+tabla ocupa
@@ -898,9 +903,13 @@ $("btnVerificarMonitoreo").addEventListener("click", async () => {
   $("monMensaje").style.display = "none";
   $("monResultado").innerHTML = "";
 
-  const { data, error } = await sb.functions.invoke("mikrotik-estado", {
-    body: { empresa_id: empresaMonitoreoActual },
-  });
+  // Las dos cosas se piden en paralelo — son dos Edge Functions
+  // independientes, cada una con su propia conexión al router.
+  const [estadoResp, servidoresResp] = await Promise.all([
+    sb.functions.invoke("mikrotik-estado", { body: { empresa_id: empresaMonitoreoActual } }),
+    sb.functions.invoke("mikrotik-servidores", { body: { accion: "verificar", empresa_id: empresaMonitoreoActual } }),
+  ]);
+  const { data, error } = estadoResp;
 
   $("btnVerificarMonitoreo").disabled = false;
   $("btnVerificarMonitoreo").textContent = "Verificar ahora";
@@ -908,16 +917,29 @@ $("btnVerificarMonitoreo").addEventListener("click", async () => {
   if (error || data?.error) {
     $("monMensaje").style.display = "block";
     $("monMensaje").textContent = "Error: " + (data?.error || error.message);
-    return;
-  }
-
-  if (!data.routers || data.routers.length === 0) {
+  } else if (!data.routers || data.routers.length === 0) {
     $("monMensaje").style.display = "block";
     $("monMensaje").textContent = "Esta empresa todavía no tiene un router MikroTik configurado.";
-    return;
+  } else {
+    $("monResultado").innerHTML = data.routers.map(pintarRouterEstado).join("");
   }
 
-  $("monResultado").innerHTML = data.routers.map(pintarRouterEstado).join("");
+  // Servidores: si "mikrotik-servidores" trajo resultados frescos se
+  // pintan directo (sin esperar otra vuelta a la base de datos); si
+  // falló por lo que sea, se recarga igual desde la base — ahí queda
+  // el último estado conocido (el de la revisión automática de cada
+  // 10 min, si lo hubo).
+  const srvData = servidoresResp?.data;
+  if (!servidoresResp?.error && srvData && !srvData.error && srvData.servidores) {
+    const grid = $("servidoresGrid");
+    $("servidoresEmpty").style.display = srvData.servidores.length ? "none" : "block";
+    grid.innerHTML = srvData.servidores
+      .map((s) => pintarServidorCard({ id: s.id, nombre: s.nombre, ip: s.ip, estado: s }))
+      .join("");
+    engancharAccionesServidores();
+  } else {
+    await cargarServidores();
+  }
 });
 
 function formatBps(bps) {
@@ -1324,6 +1346,141 @@ async function cargarRoutersConfigurados() {
     });
   });
 }
+
+// ------------------------------------------------------------
+// Servidores vigilados (cualquier usuario puede agregar/editar, igual
+// que el inventario): equipos con IP fija dentro de la red de una
+// empresa a los que se les hace ping DESDE el router MikroTik — la
+// Edge Function "mikrotik-servidores" hace el chequeo real, tanto
+// cuando se da clic en "Verificar ahora" como, sola, cada 10 minutos
+// (tarea programada en la base de datos). Aquí solo se lee/edita el
+// listado y se pinta el último estado conocido (tabla
+// "servidores_estado", que llena esa misma Edge Function).
+// ------------------------------------------------------------
+
+let servidorEditandoId = null;
+
+function formatearHaceTiempo(iso) {
+  if (!iso) return "sin datos";
+  const segundos = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (segundos < 60) return "justo ahora";
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+  const dias = Math.floor(horas / 24);
+  return `hace ${dias} d`;
+}
+
+function pintarServidorCard(srv) {
+  const estado = srv.estado;
+  const sinDatos = !estado || estado.ultima_verificacion == null;
+  const enLinea = estado?.en_linea;
+  const clase = sinDatos ? "" : (enLinea ? "mon-conn-ok" : "mon-conn-bad");
+  const pillClase = sinDatos ? "pill-warn" : (enLinea ? "pill-ok" : "pill-bad");
+  const pillTexto = sinDatos ? "Sin revisar aún" : (enLinea ? "Encendido" : "No responde");
+  const detalle = sinDatos
+    ? "Se revisará en el próximo chequeo automático (cada 10 min) o al dar clic en \"Verificar ahora\"."
+    : `${enLinea ? "Ping" + (estado.latencia_ms != null ? ` ${estado.latencia_ms} ms` : " ok") : "No respondió al ping"} · ${formatearHaceTiempo(estado.ultima_verificacion)}`;
+
+  return `
+    <div class="mon-conn-card ${clase}" data-servidor-json="${escapeAttr(JSON.stringify(srv))}">
+      <div class="mon-conn-top">
+        <span class="mon-conn-title">🖥️ ${escapeHtml(srv.nombre)} <span class="mon-conn-if">(${escapeHtml(srv.ip)})</span></span>
+        <span class="pill ${pillClase}">${pillTexto}</span>
+      </div>
+      <div class="mon-conn-speed">${detalle}</div>
+      <div class="actions-cell" style="margin-top:10px;">
+        <button class="icon-btn" data-editar-servidor="${srv.id}">Editar</button>
+        <button class="icon-btn danger" data-borrar-servidor="${srv.id}">Eliminar</button>
+      </div>
+    </div>`;
+}
+
+async function cargarServidores() {
+  const grid = $("servidoresGrid");
+  if (!grid || !empresaMonitoreoActual) return;
+
+  const { data, error } = await sb
+    .from("servidores")
+    .select("*, servidores_estado(en_linea, latencia_ms, ultima_verificacion)")
+    .eq("empresa_id", empresaMonitoreoActual)
+    .order("nombre");
+
+  if (error) { toast("Error al cargar servidores: " + error.message, true); return; }
+
+  const servidores = (data || []).map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+    ip: s.ip,
+    estado: Array.isArray(s.servidores_estado) ? s.servidores_estado[0] : s.servidores_estado,
+  }));
+
+  $("servidoresEmpty").style.display = servidores.length ? "none" : "block";
+  grid.innerHTML = servidores.map(pintarServidorCard).join("");
+  engancharAccionesServidores();
+}
+
+function engancharAccionesServidores() {
+  const grid = $("servidoresGrid");
+  if (!grid) return;
+
+  grid.querySelectorAll("[data-editar-servidor]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const srv = JSON.parse(b.closest("[data-servidor-json]").dataset.servidorJson);
+      servidorEditandoId = srv.id;
+      $("srvNombre").value = srv.nombre || "";
+      $("srvIp").value = srv.ip || "";
+      $("btnGuardarServidor").textContent = "Guardar cambios";
+      $("btnCancelarEdicionServidor").style.display = "inline-block";
+      $("servidorError").textContent = "";
+    });
+  });
+
+  grid.querySelectorAll("[data-borrar-servidor]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("¿Dejar de vigilar este servidor?")) return;
+      const { error } = await sb.from("servidores").delete().eq("id", b.dataset.borrarServidor);
+      if (error) { toast("Error al eliminar: " + error.message, true); return; }
+      toast("Servidor eliminado.");
+      cancelarEdicionServidor();
+      await cargarServidores();
+    });
+  });
+}
+
+function cancelarEdicionServidor() {
+  servidorEditandoId = null;
+  $("srvNombre").value = "";
+  $("srvIp").value = "";
+  $("btnGuardarServidor").textContent = "Agregar";
+  $("btnCancelarEdicionServidor").style.display = "none";
+  $("servidorError").textContent = "";
+}
+
+$("btnCancelarEdicionServidor").addEventListener("click", cancelarEdicionServidor);
+
+$("btnGuardarServidor").addEventListener("click", async () => {
+  $("servidorError").textContent = "";
+  if (!empresaMonitoreoActual) { $("servidorError").textContent = "Selecciona una empresa arriba."; return; }
+
+  const nombre = $("srvNombre").value.trim();
+  const ip = $("srvIp").value.trim();
+  if (!nombre) { $("servidorError").textContent = "Escribe un nombre para el servidor."; return; }
+  if (!ip) { $("servidorError").textContent = "Escribe la IP del servidor."; return; }
+
+  $("btnGuardarServidor").disabled = true;
+  const { error } = servidorEditandoId
+    ? await sb.from("servidores").update({ nombre, ip }).eq("id", servidorEditandoId)
+    : await sb.from("servidores").insert({ nombre, ip, empresa_id: empresaMonitoreoActual });
+  $("btnGuardarServidor").disabled = false;
+
+  if (error) { $("servidorError").textContent = "Error: " + error.message; return; }
+
+  toast(servidorEditandoId ? "Servidor actualizado." : "Servidor agregado — se revisa en el próximo chequeo.");
+  cancelarEdicionServidor();
+  await cargarServidores();
+});
 
 // ------------------------------------------------------------
 // Equipo (solo admin): crear, editar y eliminar colaboradores sin
