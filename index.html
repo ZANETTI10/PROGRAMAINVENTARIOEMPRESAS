@@ -429,6 +429,44 @@ tbody tr:last-child td { border-bottom: none; }
 .dash-net-bad { background: rgba(251, 113, 133, 0.12); color: var(--danger); }
 .dash-net-muted { background: rgba(255, 255, 255, 0.05); color: var(--text-faint); }
 
+.dash-card { cursor: pointer; }
+.dash-card button, .dash-card select { cursor: pointer; }
+.dash-since { display: block; color: var(--text-faint); font-size: 0.68rem; margin-top: 2px; }
+
+.auto-refresh-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 0.82rem; cursor: pointer; user-select: none; }
+.auto-refresh-field input { width: auto; cursor: pointer; }
+
+.dash-modal-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(3, 6, 14, 0.72);
+  align-items: flex-start; justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+}
+.dash-modal-overlay.abierto { display: flex; }
+.dash-modal {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 100%; max-width: 760px;
+  padding: 24px;
+  position: relative;
+}
+.dash-modal-cerrar {
+  position: absolute; top: 14px; right: 14px;
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-soft);
+  color: var(--text-dim); font-size: 1.1rem; line-height: 1;
+  cursor: pointer;
+}
+.dash-modal-cerrar:hover { color: var(--text); border-color: var(--accent); }
+.dash-modal h2 { margin: 0 24px 4px 0; font-size: 1.2rem; }
+.dash-modal-sub { color: var(--text-faint); font-size: 0.8rem; margin-bottom: 16px; }
+.dash-modal-body { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
+.dash-modal-cargando { color: var(--text-faint); padding: 30px 0; text-align: center; }
+.dash-modal-body .actions-cell { display: none; } /* el modal del Dashboard es de solo lectura; editar/eliminar vive en Monitoreo */
+
 .cpu-ring {
   position: relative;
   width: 30px;
@@ -634,6 +672,10 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="toolbar">
         <button class="btn-primary" style="width:auto; margin-top:0;" id="btnActualizarDashboard">Actualizar estado</button>
         <button class="icon-btn" id="btnSincronizarHoraTodos" style="display:none;" title="Pone la zona horaria de Bogotá y prende NTP en todos los routers del Dashboard">🕒 Hora Colombia en todos</button>
+        <label class="auto-refresh-field" for="chkAutoActualizarDash">
+          <input type="checkbox" id="chkAutoActualizarDash" />
+          Auto-actualizar cada 3 min
+        </label>
         <span class="empty-state" id="dashActualizado" style="padding:0; display:none;"></span>
       </div>
 
@@ -982,6 +1024,15 @@ tbody tr:last-child td { border-bottom: none; }
     </section>
 
   </main>
+</div>
+
+<div class="dash-modal-overlay" id="dashDetalleOverlay">
+  <div class="dash-modal">
+    <button class="dash-modal-cerrar" id="btnCerrarDashDetalle" type="button">✕</button>
+    <h2 id="dashDetalleTitulo"></h2>
+    <div class="dash-modal-sub">Esto consulta el router en vivo, igual que "Verificar ahora" en Monitoreo — no hace falta cambiar de pantalla.</div>
+    <div class="dash-modal-body" id="dashDetalleBody"><div class="dash-modal-cargando">Consultando…</div></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>

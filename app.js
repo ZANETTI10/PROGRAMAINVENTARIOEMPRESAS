@@ -174,6 +174,35 @@ $("btnSincronizarHoraTodos").addEventListener("click", () => sincronizarHoraTodo
 // tener que pedirlos de nuevo por separado.
 let ultimoDashboardItems = [];
 
+// Auto-actualización del Dashboard: revisa todo solo cada 3 minutos, y
+// solo mientras la pestaña Dashboard esté realmente abierta (si el
+// técnico está en Inventario o Monitoreo, no tiene sentido seguir
+// golpeando todos los routers de fondo). La preferencia (activado o no)
+// se recuerda entre visitas con localStorage.
+let autoRefreshDashTimer = null;
+
+function vistaDashboardActiva() {
+  return $("view-dashboard")?.classList.contains("active");
+}
+
+function aplicarAutoRefreshDash() {
+  if (autoRefreshDashTimer) { clearInterval(autoRefreshDashTimer); autoRefreshDashTimer = null; }
+  if (!$("chkAutoActualizarDash").checked) return;
+  autoRefreshDashTimer = setInterval(() => {
+    if (vistaDashboardActiva() && !$("btnActualizarDashboard").disabled) cargarDashboard();
+  }, 3 * 60 * 1000);
+}
+
+$("chkAutoActualizarDash").addEventListener("change", () => {
+  try { localStorage.setItem("autoActualizarDash", $("chkAutoActualizarDash").checked ? "1" : "0"); } catch (_e) { /* ignorar */ }
+  aplicarAutoRefreshDash();
+});
+
+try {
+  $("chkAutoActualizarDash").checked = localStorage.getItem("autoActualizarDash") === "1";
+} catch (_e) { /* ignorar */ }
+aplicarAutoRefreshDash();
+
 async function cargarDashboard() {
   $("btnActualizarDashboard").disabled = true;
   $("btnActualizarDashboard").textContent = "Actualizando…";
@@ -225,6 +254,22 @@ async function cargarDashboard() {
   // conserva dentro de cada grupo, gracias a que sort() es estable).
   const RANGO_NIVEL_DASH = { alerta: 0, advertencia: 1, ok: 2, sinRouter: 3 };
   items = items.slice().sort((a, b) => RANGO_NIVEL_DASH[estadoEmpresaDash(a).nivel] - RANGO_NIVEL_DASH[estadoEmpresaDash(b).nivel]);
+
+  // Guarda, por empresa, desde cuándo está en su nivel actual — así cada
+  // tarjeta puede mostrar "así desde hace X" en vez de solo el estado de
+  // ahora mismo. Si esto falla por lo que sea, el Dashboard sigue
+  // funcionando igual, simplemente sin ese dato esta vez.
+  try {
+    const niveles = items.map((item) => ({ empresa_id: item.empresa_id, nivel: estadoEmpresaDash(item).nivel }));
+    const { data: nivelesResp } = await sb.functions.invoke("mikrotik-servidores", {
+      body: { accion: "registrar_niveles", niveles },
+    });
+    const desdePorEmpresa = new Map((nivelesResp?.niveles || []).map((n) => [n.empresa_id, n.cambiado_en]));
+    items = items.map((item) => ({ ...item, nivelDesde: desdePorEmpresa.get(item.empresa_id) || null }));
+  } catch (_e) {
+    // sin historial esta vez, no es grave
+  }
+
   ultimoDashboardItems = items;
 
   $("dashResumen").style.display = "grid";
@@ -241,7 +286,7 @@ async function cargarDashboard() {
   $("dashActualizado").innerHTML = '<span class="dash-live-dot"></span>Actualizado a las ' + new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 
   $("dashGrid").querySelectorAll("[data-dash-empresa]").forEach((el) => {
-    el.addEventListener("click", () => irAMonitoreoDesdeDashboard(el.dataset.dashEmpresa));
+    el.addEventListener("click", () => abrirDetalleDashboard(el.dataset.dashEmpresa, el.dataset.dashNombre));
   });
 
   $("dashGrid").querySelectorAll("[data-reiniciar-router]").forEach((b) => {
@@ -440,7 +485,7 @@ function pintarDashCard(item) {
 
   if (routers.length === 0) {
     return `
-      <div class="dash-card dash-sin-router" data-dash-empresa="${item.empresa_id}">
+      <div class="dash-card dash-sin-router" data-dash-empresa="${item.empresa_id}" data-dash-nombre="${escapeAttr(item.empresa_nombre)}">
         <div class="dash-card-top"><h4>${escapeHtml(item.empresa_nombre)}</h4><span class="pill">Sin router</span></div>
         <div class="dash-card-sub">No tiene un router MikroTik configurado todavía.</div>
       </div>`;
@@ -513,13 +558,25 @@ function pintarDashCard(item) {
       ${pintarRedMiniPillsDash(r)}`;
   }).join("");
 
+  const desdeHtml = item.nivelDesde ? `<span class="dash-since">${formatearDesdeCuando(item.nivelDesde)}</span>` : "";
+
   return `
-    <div class="dash-card dash-${nivel}" data-dash-empresa="${item.empresa_id}">
+    <div class="dash-card dash-${nivel}" data-dash-empresa="${item.empresa_id}" data-dash-nombre="${escapeAttr(item.empresa_nombre)}">
       <div class="dash-card-top"><h4>${escapeHtml(item.empresa_nombre)}</h4><span class="pill ${estadoClase}">${estadoTxt}</span></div>
       <div class="dash-card-sub">${routers.length} router${routers.length > 1 ? "es" : ""} configurado${routers.length > 1 ? "s" : ""}</div>
+      ${desdeHtml}
       <div class="dash-routers">${routerRows}</div>
       <div class="dash-badges">${badges.join("")}</div>
     </div>`;
+}
+
+// "hace 2 h" ya trae el "hace" incorporado (formatearHaceTiempo, más
+// abajo en el archivo) — "desde hace 2 h" es la forma natural en
+// español de decir "lleva 2 h así", por eso se combinan directo.
+function formatearDesdeCuando(iso) {
+  if (!iso) return "";
+  const txt = formatearHaceTiempo(iso);
+  return txt === "justo ahora" ? "Cambió justo ahora" : `Así desde ${txt}`;
 }
 
 function irAMonitoreoDesdeDashboard(empresaId) {
@@ -531,6 +588,92 @@ function irAMonitoreoDesdeDashboard(empresaId) {
   $("navMonitoreo").click();
   setTimeout(() => $("btnVerificarMonitoreo").click(), 60);
 }
+
+// ------------------------------------------------------------
+// Detalle de una empresa SIN salir del Dashboard: clic en cualquier
+// tarjeta abre este modal, que consulta el router en vivo (igual que
+// "Verificar ahora" en Monitoreo) y pinta exactamente lo mismo que ahí
+// (pintarRouterEstado, pintarServidoresAgrupadosConRouters) — Editar y
+// Monitoreo siguen viviendo en su pestaña, acá es solo para ver sin
+// tener que cambiar de pantalla cada vez.
+// ------------------------------------------------------------
+
+async function abrirDetalleDashboard(empresaId, empresaNombre) {
+  $("dashDetalleOverlay").dataset.empresaId = empresaId;
+  $("dashDetalleTitulo").textContent = empresaNombre || "";
+  $("dashDetalleBody").innerHTML = '<div class="dash-modal-cargando">Consultando…</div>';
+  $("dashDetalleOverlay").classList.add("abierto");
+
+  const [estadoResp, servidoresResp, routersResp] = await Promise.all([
+    sb.functions.invoke("mikrotik-estado", { body: { empresa_id: empresaId } }),
+    sb.functions.invoke("mikrotik-servidores", { body: { accion: "verificar", empresa_id: empresaId } }),
+    sb.functions.invoke("mikrotik-servidores", { body: { accion: "listar_routers", empresa_id: empresaId } }),
+  ]);
+
+  // Si mientras se esperaba la respuesta ya se cerró este modal o se
+  // abrió el de otra empresa, no pisar lo que esté mostrando ahora.
+  if ($("dashDetalleOverlay").dataset.empresaId !== empresaId) return;
+
+  const { data, error } = estadoResp;
+  if (error || data?.error) {
+    $("dashDetalleBody").innerHTML = `<div class="error-msg">Error: ${escapeHtml(data?.error || error.message)}</div>`;
+    return;
+  }
+
+  const routersDetalleHtml = (data.routers && data.routers.length)
+    ? data.routers.map(pintarRouterEstado).join("")
+    : '<p class="empty-state">Esta empresa todavía no tiene un router MikroTik configurado.</p>';
+
+  const routersLista = (!routersResp?.error && routersResp.data?.routers)
+    ? routersResp.data.routers
+    : (data.routers || []).map((r) => ({ id: r.id, nombre: r.nombre }));
+
+  const srvData = servidoresResp?.data;
+  let serversHtml = "";
+  if (!servidoresResp?.error && srvData && !srvData.error && srvData.servidores && srvData.servidores.length > 0) {
+    const listaServidores = srvData.servidores.map((s) => ({ id: s.id, nombre: s.nombre, ip: s.ip, router_id: s.router_id, estado: s }));
+    serversHtml = `
+      <div class="card mon-card" style="margin-top:14px;">
+        <h3>Servidores vigilados</h3>
+        ${pintarServidoresAgrupadosConRouters(listaServidores, routersLista)}
+      </div>`;
+  }
+
+  $("dashDetalleBody").innerHTML = routersDetalleHtml + serversHtml +
+    '<button class="btn-secondary" style="width:auto; margin-top:16px;" id="btnDashDetalleIrMonitoreo" type="button">Ir a Monitoreo (configurar / agregar) →</button>';
+
+  $("btnDashDetalleIrMonitoreo")?.addEventListener("click", () => {
+    cerrarDetalleDashboard();
+    irAMonitoreoDesdeDashboard(empresaId);
+  });
+}
+
+function cerrarDetalleDashboard() {
+  $("dashDetalleOverlay").classList.remove("abierto");
+  $("dashDetalleOverlay").dataset.empresaId = "";
+}
+
+$("btnCerrarDashDetalle").addEventListener("click", cerrarDetalleDashboard);
+$("dashDetalleOverlay").addEventListener("click", (e) => {
+  if (e.target === $("dashDetalleOverlay")) cerrarDetalleDashboard();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("dashDetalleOverlay").classList.contains("abierto")) cerrarDetalleDashboard();
+});
+
+// Delegación para "ver todas las interfaces" dentro del modal — el
+// listener equivalente de Monitoreo solo escucha dentro de #monResultado.
+$("dashDetalleBody").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-toggle-interfaces]");
+  if (!btn) return;
+  const lista = document.getElementById(btn.dataset.toggleInterfaces);
+  if (!lista) return;
+  const abierto = lista.classList.toggle("abierto");
+  btn.classList.toggle("abierto", abierto);
+  const etiqueta = btn.dataset.toggleLabel || "todas las interfaces";
+  const cuenta = btn.dataset.toggleCount;
+  btn.innerHTML = `<span class="chev">▾</span> ${abierto ? "Ocultar" : "Ver"} ${etiqueta}${cuenta ? ` (${cuenta})` : ""}`;
+});
 
 // ------------------------------------------------------------
 // Empresas
@@ -1506,11 +1649,19 @@ function pintarServidorCard(srv) {
 // router no tiene sentido mostrar el encabezado, así que queda igual que
 // antes: una sola lista plana.
 function pintarServidoresAgrupados(servidores) {
-  if (routersDeEmpresaActual.length < 2) {
+  return pintarServidoresAgrupadosConRouters(servidores, routersDeEmpresaActual);
+}
+
+// Versión genérica (recibe la lista de routers en vez de usar la global
+// "routersDeEmpresaActual") para poder reutilizarla también en el modal
+// de detalle del Dashboard, que puede abrirse para una empresa distinta
+// a la que esté seleccionada en Monitoreo.
+function pintarServidoresAgrupadosConRouters(servidores, routers) {
+  if (!routers || routers.length < 2) {
     return servidores.map(pintarServidorCard).join("");
   }
 
-  const nombrePorRouter = new Map(routersDeEmpresaActual.map((r) => [r.id, r.nombre]));
+  const nombrePorRouter = new Map(routers.map((r) => [r.id, r.nombre]));
   const grupos = new Map();
   for (const s of servidores) {
     const clave = s.router_id || "__sin_router__";
@@ -1518,7 +1669,7 @@ function pintarServidoresAgrupados(servidores) {
     grupos.get(clave).push(s);
   }
 
-  const orden = [...routersDeEmpresaActual.map((r) => r.id), "__sin_router__"];
+  const orden = [...routers.map((r) => r.id), "__sin_router__"];
   return orden
     .filter((clave) => grupos.has(clave))
     .map((clave) => {
