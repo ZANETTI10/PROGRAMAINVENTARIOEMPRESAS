@@ -831,9 +831,9 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="card">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
           <h3 style="margin:0;">Equipos registrados</h3>
-          <button class="btn-secondary" style="width:auto; margin-top:0;" id="btnCombinarEquipos" type="button" disabled title="Marca 2 equipos (la casilla de la izquierda) para combinarlos en uno solo">Combinar seleccionados</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0;" id="btnCombinarEquipos" type="button" disabled title="Marca 2 equipos (la casilla de la izquierda) para dejar solo el más reciente">Combinar seleccionados</button>
         </div>
-        <p class="sub" style="margin-top:4px;">Si el agente creó un equipo nuevo en vez de actualizar uno que ya habías cargado a mano (porque el nombre no coincidía), marca ambos con la casilla de la izquierda y dale "Combinar seleccionados": se quedan los datos de los dos en un solo registro y se borra el duplicado.</p>
+        <p class="sub" style="margin-top:4px;">Si el agente creó un equipo nuevo en vez de actualizar uno que ya habías cargado a mano (porque el nombre no coincidía), marca los dos con la casilla de la izquierda y dale "Combinar seleccionados": se queda el más reciente de los dos (completado con los datos que le falten, como el código de renting) y se borra el más viejo, sin preguntar nada más.</p>
         <div class="table-wrap">
           <table>
             <thead><tr>

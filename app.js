@@ -1004,28 +1004,13 @@ $("btnCombinarEquipos").addEventListener("click", async () => {
   const rB = filas.find((r) => r.id === idB);
   if (!rA || !rB) { toast("No se encontraron los dos equipos marcados, recarga e intenta de nuevo.", true); return; }
 
-  // Si uno de los dos viene del agente automático, ese se queda como
-  // principal (trae el estado de conexión en vivo); si los dos son del
-  // mismo tipo, se pregunta cuál conservar.
-  let principal, secundario;
-  if (rA.origen === "agente" && rB.origen !== "agente") { principal = rA; secundario = rB; }
-  else if (rB.origen === "agente" && rA.origen !== "agente") { principal = rB; secundario = rA; }
-  else {
-    const eleccion = prompt(
-      `¿Cuál de los dos equipos quieres conservar? (el otro se borra, pero sus datos se usan para completar al que quede)
-
-` +
-      `1) ${resumenEquipoParaElegir(rA)}
-` +
-      `2) ${resumenEquipoParaElegir(rB)}
-
-` +
-      `Escribe 1 o 2:`
-    );
-    if (eleccion === "1") { principal = rA; secundario = rB; }
-    else if (eleccion === "2") { principal = rB; secundario = rA; }
-    else return;
-  }
+  // Se queda automáticamente el más reciente de los dos (sin preguntar
+  // nada) y se borra el viejo -- pero antes, se copian al que se queda
+  // los campos que tenga vacíos y el viejo sí tenía (código de renting,
+  // responsable, sitio, comentarios, etc.), para no perder ese dato
+  // solo por haber quedado en el registro que se borra.
+  const principal = new Date(rA.created_at) >= new Date(rB.created_at) ? rA : rB;
+  const secundario = principal === rA ? rB : rA;
 
   const CAMPOS_COMBINABLES = [
     ...Object.values(CAMPOS_EQUIPO_DB),
@@ -1038,7 +1023,7 @@ $("btnCombinarEquipos").addEventListener("click", async () => {
     if (vacioEnPrincipal && tieneValorEnSecundario) cambios[col] = secundario[col];
   });
 
-  if (!confirm(`Se va a quedar "${resumenEquipoParaElegir(principal)}", completado con los datos que tenga de más "${resumenEquipoParaElegir(secundario)}", y se va a borrar este último. ¿Combinar?`)) return;
+  if (!confirm(`Se va a quedar el más reciente: "${resumenEquipoParaElegir(principal)}", y se va a borrar: "${resumenEquipoParaElegir(secundario)}". ¿Continuar?`)) return;
 
   if (Object.keys(cambios).length) {
     const { error: errUpdate } = await sb.from("equipos").update(cambios).eq("id", principal.id);
@@ -1049,7 +1034,7 @@ $("btnCombinarEquipos").addEventListener("click", async () => {
 
   equiposSeleccionadosCombinar.clear();
   if (equipoEditandoId === secundario.id || equipoEditandoId === principal.id) cancelarEdicionEquipo();
-  toast("Equipos combinados en uno solo.");
+  toast("Listo: se quedó el más reciente y se borró el duplicado.");
   await cargarEquipos();
 });
 
