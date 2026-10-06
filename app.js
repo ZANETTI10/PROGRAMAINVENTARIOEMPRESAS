@@ -806,12 +806,14 @@ const CAMPOS_EQUIPO_DB = {
 let equipoEditandoId = null;
 const equiposSeleccionadosCombinar = new Set();
 
-// El campo de codigo de renting solo tiene sentido si el equipo es de
-// renting -- se muestra/oculta segun la casilla, en vez de dejarlo
-// siempre visible aunque no aplique.
-$("eqEsRenting").addEventListener("change", () => {
-  $("eqCodigoRentingWrap").style.display = $("eqEsRenting").checked ? "block" : "none";
-});
+// Los campos de renting (codigo, proveedor, fechas) solo tienen sentido
+// si el equipo es de renting -- se muestran/ocultan segun la casilla,
+// en vez de dejarlos siempre visibles aunque no apliquen.
+function actualizarVisibilidadCamposRenting() {
+  const mostrar = $("eqEsRenting").checked;
+  document.querySelectorAll(".campo-renting").forEach((el) => { el.style.display = mostrar ? "" : "none"; });
+}
+$("eqEsRenting").addEventListener("change", actualizarVisibilidadCamposRenting);
 
 $("btnGuardarEquipo").addEventListener("click", async () => {
   $("equipoError").textContent = "";
@@ -831,6 +833,9 @@ $("btnGuardarEquipo").addEventListener("click", async () => {
   if (!registro.registrado_por) registro.registrado_por = sesion.user.email;
   registro.es_renting = $("eqEsRenting").checked;
   registro.codigo_renting = registro.es_renting ? $("eqCodigoRenting").value.trim() : "";
+  registro.renting_proveedor = registro.es_renting ? $("eqRentingProveedor").value.trim() : "";
+  registro.renting_inicio = registro.es_renting ? ($("eqRentingInicio").value || null) : null;
+  registro.renting_fin = registro.es_renting ? ($("eqRentingFin").value || null) : null;
 
   const { error } = equipoEditandoId
     ? await sb.from("equipos").update(registro).eq("id", equipoEditandoId)
@@ -849,7 +854,10 @@ function cancelarEdicionEquipo() {
   CAMPOS_EQUIPO.forEach(([, id]) => { if (id !== "eqRegistradoPor") $(id).value = ""; });
   $("eqEsRenting").checked = false;
   $("eqCodigoRenting").value = "";
-  $("eqCodigoRentingWrap").style.display = "none";
+  $("eqRentingProveedor").value = "";
+  $("eqRentingInicio").value = "";
+  $("eqRentingFin").value = "";
+  actualizarVisibilidadCamposRenting();
   $("equipoFormTitulo").textContent = "Registrar equipo";
   $("btnGuardarEquipo").textContent = "Guardar equipo";
   $("btnCancelarEdicionEquipo").style.display = "none";
@@ -930,11 +938,19 @@ async function cargarEquipos() {
       <td>${r.es_renting ? `<span class="pill">${r.codigo_renting ? escapeHtml(r.codigo_renting) : "Renting"}</span>` : ""}</td>
       <td>${escapeHtml(r.comentarios)}</td><td>${escapeHtml(r.registrado_por)}</td>
       <td class="actions-cell">
+        <button class="icon-btn" data-detalle-equipo="${r.id}">Detalle</button>
         <button class="icon-btn" data-editar-equipo="${r.id}">Editar</button>
         ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-equipo="${r.id}">Borrar</button>` : ""}
       </td>`;
     tbody.appendChild(tr);
     tr.dataset.equipoJson = JSON.stringify(r);
+  });
+
+  tbody.querySelectorAll("[data-detalle-equipo]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const r = JSON.parse(b.closest("tr").dataset.equipoJson);
+      abrirDetalleEquipo(r);
+    });
   });
 
   tbody.querySelectorAll(".chk-combinar-equipo").forEach((chk) => {
@@ -953,7 +969,10 @@ async function cargarEquipos() {
       CAMPOS_EQUIPO.forEach(([campo, id]) => { $(id).value = r[CAMPOS_EQUIPO_DB[campo]] || ""; });
       $("eqEsRenting").checked = !!r.es_renting;
       $("eqCodigoRenting").value = r.codigo_renting || "";
-      $("eqCodigoRentingWrap").style.display = r.es_renting ? "block" : "none";
+      $("eqRentingProveedor").value = r.renting_proveedor || "";
+      $("eqRentingInicio").value = r.renting_inicio || "";
+      $("eqRentingFin").value = r.renting_fin || "";
+      actualizarVisibilidadCamposRenting();
       $("equipoFormTitulo").textContent = "Editar equipo";
       $("btnGuardarEquipo").textContent = "Guardar cambios";
       $("btnCancelarEdicionEquipo").style.display = "inline-block";
@@ -1014,7 +1033,8 @@ $("btnCombinarEquipos").addEventListener("click", async () => {
 
   const CAMPOS_COMBINABLES = [
     ...Object.values(CAMPOS_EQUIPO_DB),
-    "es_renting", "codigo_renting",
+    "es_renting", "codigo_renting", "renting_proveedor", "renting_inicio", "renting_fin",
+    "ip_local", "usuario_sesion", "ultimo_reinicio", "windows_activado", "antivirus_estado",
   ];
   const cambios = {};
   CAMPOS_COMBINABLES.forEach((col) => {
@@ -1036,6 +1056,135 @@ $("btnCombinarEquipos").addEventListener("click", async () => {
   if (equipoEditandoId === secundario.id || equipoEditandoId === principal.id) cancelarEdicionEquipo();
   toast("Listo: se quedó el más reciente y se borró el duplicado.");
   await cargarEquipos();
+});
+
+// ------------------------------------------------------------
+// Panel de detalle de un equipo: todo lo que no cabe (o no se ve bien)
+// en la tabla, agrupado por tema, mas el historial de disco libre que
+// va guardando cada reporte del agente.
+// ------------------------------------------------------------
+
+function fmtFechaCorta(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + (iso.length <= 10 ? "T00:00:00" : ""));
+  return d.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+function datoHtml(etiqueta, valor) {
+  return `<div class="dato"><span class="et">${escapeHtml(etiqueta)}</span>${valor ? escapeHtml(valor) : "—"}</div>`;
+}
+
+function construirDetalleEquipoHtml(r) {
+  const esDelAgente = r.origen === "agente";
+  const seccionConexion = `
+    <div class="equipo-detalle-seccion">
+      <h4>Estado y conexión</h4>
+      <div style="margin-bottom:10px;">${estadoAgenteEquipoHtml(r)}</div>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("IP local", r.ip_local)}
+        ${datoHtml("Usuario con sesión iniciada", r.usuario_sesion)}
+        ${datoHtml("Último reinicio", r.ultimo_reinicio ? fmtFecha(r.ultimo_reinicio) : "")}
+        ${datoHtml("Último reporte del agente", esDelAgente ? fmtFecha(r.actualizado_en) : "")}
+      </div>
+    </div>`;
+
+  const seccionIdentificacion = `
+    <div class="equipo-detalle-seccion">
+      <h4>Identificación</h4>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("Tipo de equipo", r.tipo_equipo)}
+        ${datoHtml("Nombre de red", r.nombre_red)}
+        ${datoHtml("Sitio / Ubicación", r.sitio)}
+        ${datoHtml("Responsable", r.responsable)}
+        ${datoHtml("Referencia", r.referencia)}
+        ${datoHtml("Serial", r.serial)}
+      </div>
+    </div>`;
+
+  const seccionHardware = `
+    <div class="equipo-detalle-seccion">
+      <h4>Hardware</h4>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("Procesador", r.procesador)}
+        ${datoHtml("Memoria RAM", r.memoria_ram)}
+        ${datoHtml("Tipo de memoria", r.tipo_memoria)}
+        ${datoHtml("Disco duro", r.disco_duro)}
+        ${datoHtml("Tipo de disco", r.tipo_disco)}
+      </div>
+    </div>`;
+
+  const seccionSistema = `
+    <div class="equipo-detalle-seccion">
+      <h4>Sistema y licencia</h4>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("Sistema operativo", r.licencia_so)}
+        ${datoHtml("Windows activado", r.windows_activado)}
+        ${datoHtml("Antivirus", r.antivirus_estado)}
+        ${datoHtml("Tipo de licencia", r.tipo_licencia)}
+      </div>
+    </div>`;
+
+  const seccionRenting = r.es_renting ? `
+    <div class="equipo-detalle-seccion">
+      <h4>Renting</h4>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("Código de renting", r.codigo_renting)}
+        ${datoHtml("Proveedor", r.renting_proveedor)}
+        ${datoHtml("Inicio del contrato", r.renting_inicio ? fmtFechaCorta(r.renting_inicio) : "")}
+        ${datoHtml("Fin del contrato", r.renting_fin ? fmtFechaCorta(r.renting_fin) : "")}
+      </div>
+    </div>` : "";
+
+  const seccionRegistro = `
+    <div class="equipo-detalle-seccion">
+      <h4>Comentarios y registro</h4>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("Registrado por", r.registrado_por)}
+        ${datoHtml("Fecha de registro", fmtFecha(r.created_at))}
+      </div>
+      ${r.comentarios ? `<div class="dato" style="margin-top:10px;"><span class="et">Comentarios</span>${escapeHtml(r.comentarios)}</div>` : ""}
+    </div>`;
+
+  return seccionConexion + seccionIdentificacion + seccionHardware + seccionSistema + seccionRenting + seccionRegistro;
+}
+
+async function abrirDetalleEquipo(r) {
+  $("equipoDetalleOverlay").dataset.equipoId = r.id;
+  $("equipoDetalleTitulo").textContent = r.nombre_red || r.serial || "Equipo";
+  $("equipoDetalleBody").innerHTML = construirDetalleEquipoHtml(r) +
+    '<div class="equipo-detalle-seccion"><h4>Historial de disco libre</h4><div class="dash-modal-cargando">Cargando…</div></div>';
+  $("equipoDetalleOverlay").classList.add("abierto");
+
+  const { data, error } = await sb
+    .from("equipos_historial")
+    .select("creado_en, disco_libre_pct")
+    .eq("equipo_id", r.id)
+    .order("creado_en", { ascending: false })
+    .limit(15);
+
+  // Si mientras se esperaba la respuesta ya se cerró este modal o se
+  // abrió el de otro equipo, no pisar lo que esté mostrando ahora.
+  if ($("equipoDetalleOverlay").dataset.equipoId !== r.id) return;
+
+  const historialHtml = (!error && data && data.length)
+    ? `<ul class="equipo-detalle-historial">${data.map((h) => `<li>${fmtFecha(h.creado_en)} — ${h.disco_libre_pct != null && h.disco_libre_pct !== "" ? h.disco_libre_pct + "% libre" : "sin dato"}</li>`).join("")}</ul>`
+    : '<p class="empty-state">Sin historial todavía — se va llenando solo con cada reporte del agente.</p>';
+
+  const seccionHistorial = `<div class="equipo-detalle-seccion"><h4>Historial de disco libre (últimos reportes)</h4>${historialHtml}</div>`;
+  $("equipoDetalleBody").innerHTML = construirDetalleEquipoHtml(r) + seccionHistorial;
+}
+
+function cerrarDetalleEquipo() {
+  $("equipoDetalleOverlay").classList.remove("abierto");
+  $("equipoDetalleOverlay").dataset.equipoId = "";
+}
+
+$("btnCerrarEquipoDetalle").addEventListener("click", cerrarDetalleEquipo);
+$("equipoDetalleOverlay").addEventListener("click", (e) => {
+  if (e.target === $("equipoDetalleOverlay")) cerrarDetalleEquipo();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("equipoDetalleOverlay").classList.contains("abierto")) cerrarDetalleEquipo();
 });
 
 // ------------------------------------------------------------
@@ -1102,8 +1251,12 @@ $("btnExportarInventario").addEventListener("click", async () => {
     Fecha: fmtFecha(r.created_at), "Tipo de Equipo": r.tipo_equipo, "Nombre de red": r.nombre_red,
     Sitio: r.sitio, Responsable: r.responsable, Referencia: r.referencia, Serial: r.serial,
     Procesador: r.procesador, "Memoria RAM": r.memoria_ram, "Tipo de memoria": r.tipo_memoria,
-    "Disco duro": r.disco_duro, "Tipo de disco": r.tipo_disco, "Sistema operativo": r.licencia_so,
-    "Tipo de licencia": r.tipo_licencia, Renting: r.es_renting ? "Sí" : "No", "Código de renting": r.codigo_renting,
+    "Disco duro": r.disco_duro, "Tipo de disco": r.tipo_disco, "Disco libre %": r.disco_libre_pct,
+    "Sistema operativo": r.licencia_so, "Windows activado": r.windows_activado, Antivirus: r.antivirus_estado,
+    "Tipo de licencia": r.tipo_licencia, "IP local": r.ip_local, "Usuario con sesión": r.usuario_sesion,
+    "Último reinicio": r.ultimo_reinicio ? fmtFecha(r.ultimo_reinicio) : "",
+    Renting: r.es_renting ? "Sí" : "No", "Código de renting": r.codigo_renting,
+    "Proveedor renting": r.renting_proveedor, "Inicio renting": r.renting_inicio, "Fin renting": r.renting_fin,
     Comentarios: r.comentarios, "Registrado por": r.registrado_por,
   }));
   exportarExcel(filas, `Inventario - ${nombreEmpresa}.xlsx`, "Inventario");

@@ -94,6 +94,61 @@ function Obtener-DiscoLibrePct {
   return $null
 }
 
+function Obtener-IpLocal {
+  try {
+    $ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+      Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
+      Select-Object -First 1
+    if ($ip) { return $ip.IPAddress }
+  } catch {}
+  return $null
+}
+
+function Obtener-UsuarioSesion {
+  # Usuario con sesion iniciada en este momento (puede ser distinto del
+  # "responsable" asignado a mano). Esto funciona aunque el script lo
+  # corra la Tarea Programada como SYSTEM: la propiedad refleja quien
+  # tiene abierta la sesion de consola, no la identidad del proceso.
+  try {
+    $u = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).UserName
+    if ($u) { return $u }
+  } catch {}
+  return $null
+}
+
+function Obtener-UltimoReinicio {
+  try {
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+    if ($os.LastBootUpTime) { return $os.LastBootUpTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") }
+  } catch {}
+  return $null
+}
+
+function Obtener-WindowsActivado {
+  try {
+    $lic = Get-CimInstance -ClassName SoftwareLicensingProduct -ErrorAction Stop |
+      Where-Object { $_.PartialProductKey -and $_.Name -like "Windows*" } |
+      Select-Object -First 1
+    if ($lic) {
+      if ($lic.LicenseStatus -eq 1) { return "Activado" }
+      return "No activado"
+    }
+  } catch {}
+  return $null
+}
+
+function Obtener-AntivirusEstado {
+  try {
+    $mp = Get-MpComputerStatus -ErrorAction Stop
+    if ($mp) {
+      if ($mp.AntivirusEnabled -and $mp.RealTimeProtectionEnabled) { return "Defender activo" }
+      if ($mp.AntivirusEnabled) { return "Defender instalado, proteccion en tiempo real apagada" }
+      return "Defender desactivado"
+    }
+  } catch {}
+  return $null
+}
+
 try {
   $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
   $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
@@ -122,6 +177,11 @@ try {
     disco_libre_pct = Obtener-DiscoLibrePct
     licencia_so = if ($os) { "$($os.Caption) ($($os.Version))" } else { $null }
     serial      = if ($bios) { $bios.SerialNumber } else { $null }
+    ip_local        = Obtener-IpLocal
+    usuario_sesion  = Obtener-UsuarioSesion
+    ultimo_reinicio = Obtener-UltimoReinicio
+    windows_activado = Obtener-WindowsActivado
+    antivirus_estado = Obtener-AntivirusEstado
     comentarios = "Registrado automaticamente por el agente instalado (Windows)."
   }
 

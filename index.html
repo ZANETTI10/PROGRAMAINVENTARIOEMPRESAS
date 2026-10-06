@@ -484,6 +484,15 @@ tbody tr:last-child td { border-bottom: none; }
 .dash-modal-cargando { color: var(--text-faint); padding: 30px 0; text-align: center; }
 .dash-modal-body .actions-cell { display: none; } /* el modal del Dashboard es de solo lectura; editar/eliminar vive en Monitoreo */
 
+.equipo-detalle-seccion { margin-bottom: 18px; }
+.equipo-detalle-seccion h4 { margin: 0 0 8px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
+.equipo-detalle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 16px; }
+.equipo-detalle-grid .dato { font-size: 0.86rem; }
+.equipo-detalle-grid .dato .et { display: block; color: var(--text-faint); font-size: 0.72rem; margin-bottom: 2px; }
+.equipo-detalle-historial { list-style: none; margin: 0; padding: 0; font-size: 0.82rem; color: var(--text-dim); max-height: 160px; overflow-y: auto; }
+.equipo-detalle-historial li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.equipo-detalle-historial li:last-child { border-bottom: none; }
+
 .cpu-ring {
   position: relative;
   width: 30px;
@@ -817,7 +826,10 @@ tbody tr:last-child td { border-bottom: none; }
               Es equipo de renting
             </label>
           </div>
-          <div id="eqCodigoRentingWrap" style="display:none;"><label for="eqCodigoRenting">Código de renting</label><input id="eqCodigoRenting" /></div>
+          <div class="campo-renting" style="display:none;"><label for="eqCodigoRenting">Código de renting</label><input id="eqCodigoRenting" /></div>
+          <div class="campo-renting" style="display:none;"><label for="eqRentingProveedor">Proveedor del renting</label><input id="eqRentingProveedor" /></div>
+          <div class="campo-renting" style="display:none;"><label for="eqRentingInicio">Inicio del contrato</label><input id="eqRentingInicio" type="date" /></div>
+          <div class="campo-renting" style="display:none;"><label for="eqRentingFin">Fin del contrato</label><input id="eqRentingFin" type="date" /></div>
           <div class="full"><label for="eqComentarios">Comentarios</label><textarea id="eqComentarios" rows="2"></textarea></div>
           <div><label for="eqRegistradoPor">Registrado por</label><input id="eqRegistradoPor" /></div>
         </div>
@@ -1072,6 +1084,15 @@ tbody tr:last-child td { border-bottom: none; }
     <h2 id="dashDetalleTitulo"></h2>
     <div class="dash-modal-sub">Esto consulta el router en vivo, igual que "Verificar ahora" en Monitoreo — no hace falta cambiar de pantalla.</div>
     <div class="dash-modal-body" id="dashDetalleBody"><div class="dash-modal-cargando">Consultando…</div></div>
+  </div>
+</div>
+
+<div class="dash-modal-overlay" id="equipoDetalleOverlay">
+  <div class="dash-modal">
+    <button class="dash-modal-cerrar" id="btnCerrarEquipoDetalle" type="button">✕</button>
+    <h2 id="equipoDetalleTitulo"></h2>
+    <div class="dash-modal-sub">Todos los datos de este equipo, incluido lo que no cabe en la tabla.</div>
+    <div class="dash-modal-body" id="equipoDetalleBody"></div>
   </div>
 </div>
 

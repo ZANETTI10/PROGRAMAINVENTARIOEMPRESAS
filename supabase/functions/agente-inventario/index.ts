@@ -57,6 +57,13 @@ const CAMPOS_PERMITIDOS = [
   "serial",
   "comentarios",
   "disco_libre_pct",
+  // Datos "en vivo" del equipo en el momento del reporte (no son specs
+  // fijas como las de arriba, cambian de un reporte a otro).
+  "ip_local",
+  "usuario_sesion",
+  "ultimo_reinicio",
+  "windows_activado",
+  "antivirus_estado",
 ] as const;
 
 Deno.serve(async (req) => {
@@ -123,12 +130,25 @@ Deno.serve(async (req) => {
 
     const ahora = new Date().toISOString();
 
+    // Ademas de actualizar la fila del equipo, se guarda un renglon de
+    // historial con el disco libre de este reporte -- asi el panel de
+    // detalle puede mostrar una tendencia en vez de solo el ultimo dato.
+    async function guardarHistorial(equipoId: string) {
+      if (!equipo.disco_libre_pct) return;
+      await admin.from("equipos_historial").insert({
+        equipo_id: equipoId,
+        disco_libre_pct: equipo.disco_libre_pct,
+        creado_en: ahora,
+      });
+    }
+
     if (existente) {
       const { error } = await admin
         .from("equipos")
         .update({ ...equipo, origen: "agente", actualizado_en: ahora })
         .eq("id", existente.id);
       if (error) return json({ error: error.message }, 400);
+      await guardarHistorial(existente.id);
       return json({ ok: true, accion: "actualizado", id: existente.id });
     }
 
@@ -145,6 +165,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (insertError) return json({ error: insertError.message }, 400);
+    await guardarHistorial(nuevo.id);
     return json({ ok: true, accion: "creado", id: nuevo.id });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
