@@ -84,6 +84,16 @@ function Obtener-Responsable {
   return $null
 }
 
+function Obtener-DiscoLibrePct {
+  try {
+    $unidad = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop
+    if ($unidad -and $unidad.Size -gt 0) {
+      return [string][math]::Round(($unidad.FreeSpace / $unidad.Size) * 100)
+    }
+  } catch {}
+  return $null
+}
+
 try {
   $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
   $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
@@ -109,6 +119,7 @@ try {
     tipo_memoria = Obtener-TipoMemoria
     disco_duro  = $discoTexto
     tipo_disco  = Obtener-TipoDisco
+    disco_libre_pct = Obtener-DiscoLibrePct
     licencia_so = if ($os) { "$($os.Caption) ($($os.Version))" } else { $null }
     serial      = if ($bios) { $bios.SerialNumber } else { $null }
     comentarios = "Registrado automaticamente por el agente instalado (Windows)."

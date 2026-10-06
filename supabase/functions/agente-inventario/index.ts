@@ -56,6 +56,7 @@ const CAMPOS_PERMITIDOS = [
   "tipo_licencia",
   "serial",
   "comentarios",
+  "disco_libre_pct",
 ] as const;
 
 Deno.serve(async (req) => {

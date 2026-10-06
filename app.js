@@ -844,6 +844,43 @@ function cancelarEdicionEquipo() {
 }
 $("btnCancelarEdicionEquipo").addEventListener("click", cancelarEdicionEquipo);
 
+// Estado del agente en este equipo: en linea / sin reportar hace rato,
+// mas el disco libre si viene reportado. Los equipos cargados a mano
+// (origen distinto de "agente") no tienen estado de conexion, solo
+// se marcan como "Manual".
+function estadoAgenteEquipoHtml(r) {
+  if (r.origen !== "agente") return `<span class="pill">Manual</span>`;
+
+  const minutos = r.actualizado_en ? (Date.now() - new Date(r.actualizado_en).getTime()) / 60000 : Infinity;
+  let html;
+  if (minutos <= 7 * 60) {
+    html = `<span class="pill pill-ok">● En linea</span>`;
+  } else if (minutos <= 48 * 60) {
+    html = `<span class="pill pill-warn">Sin reportar ${formatearHaceTiempo(r.actualizado_en)}</span>`;
+  } else {
+    html = `<span class="pill pill-bad">Sin reportar ${formatearHaceTiempo(r.actualizado_en)}</span>`;
+  }
+
+  const pct = parseInt(r.disco_libre_pct, 10);
+  if (!isNaN(pct)) {
+    const clase = pct < 10 ? "pill-bad" : (pct < 20 ? "pill-warn" : "pill");
+    html += ` <span class="pill ${clase}">Disco libre ${pct}%</span>`;
+  }
+  return html;
+}
+
+// El agente reporta solo cada 6 horas sin que nadie abra la app, asi
+// que mientras se esta viendo Inventario se refresca la tabla sola
+// cada 30s -- si no, un equipo recien instalado parece que "no se
+// guardo" hasta que alguien le de F5 a mano.
+let autoRefreshInvTimer = null;
+function vistaInventarioActiva() {
+  return $("view-inventario")?.classList.contains("active");
+}
+autoRefreshInvTimer = setInterval(() => {
+  if (vistaInventarioActiva() && empresaInvActual) cargarEquipos();
+}, 30 * 1000);
+
 async function cargarEquipos() {
   const tbody = $("tablaEquipos");
   tbody.innerHTML = "";
@@ -862,6 +899,7 @@ async function cargarEquipos() {
   (data || []).forEach((r) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
+      <td>${estadoAgenteEquipoHtml(r)}</td>
       <td>${fmtFecha(r.created_at)}</td><td>${escapeHtml(r.tipo_equipo)}</td>
       <td>${escapeHtml(r.nombre_red)}</td><td>${escapeHtml(r.sitio)}</td>
       <td>${escapeHtml(r.responsable)}</td><td>${escapeHtml(r.referencia)}</td>
