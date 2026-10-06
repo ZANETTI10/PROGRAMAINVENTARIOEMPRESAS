@@ -811,6 +811,13 @@ tbody tr:last-child td { border-bottom: none; }
           <div><label for="eqTipoDisco">Tipo de disco</label><input id="eqTipoDisco" /></div>
           <div><label for="eqLicenciaSO">Sistema operativo</label><input id="eqLicenciaSO" placeholder="Ej: Windows 11 Pro" /></div>
           <div><label for="eqTipoLicencia">Tipo de licencia</label><input id="eqTipoLicencia" placeholder="Ej: OEM, retail, sin licencia" /></div>
+          <div>
+            <label class="auto-refresh-field" for="eqEsRenting" style="margin-top:26px;">
+              <input type="checkbox" id="eqEsRenting" />
+              Es equipo de renting
+            </label>
+          </div>
+          <div id="eqCodigoRentingWrap" style="display:none;"><label for="eqCodigoRenting">Código de renting</label><input id="eqCodigoRenting" /></div>
           <div class="full"><label for="eqComentarios">Comentarios</label><textarea id="eqComentarios" rows="2"></textarea></div>
           <div><label for="eqRegistradoPor">Registrado por</label><input id="eqRegistradoPor" /></div>
         </div>
@@ -822,13 +829,17 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
-        <h3>Equipos registrados</h3>
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;">Equipos registrados</h3>
+          <button class="btn-secondary" style="width:auto; margin-top:0;" id="btnCombinarEquipos" type="button" disabled title="Marca 2 equipos (la casilla de la izquierda) para combinarlos en uno solo">Combinar seleccionados</button>
+        </div>
+        <p class="sub" style="margin-top:4px;">Si el agente creó un equipo nuevo en vez de actualizar uno que ya habías cargado a mano (porque el nombre no coincidía), marca ambos con la casilla de la izquierda y dale "Combinar seleccionados": se quedan los datos de los dos en un solo registro y se borra el duplicado.</p>
         <div class="table-wrap">
           <table>
             <thead><tr>
-              <th>Estado</th><th>Fecha</th><th>Tipo</th><th>Nombre de red</th><th>Sitio</th><th>Responsable</th>
+              <th></th><th>Estado</th><th>Fecha</th><th>Tipo</th><th>Nombre de red</th><th>Sitio</th><th>Responsable</th>
               <th>Referencia</th><th>Serial</th><th>Procesador</th><th>RAM</th><th>Tipo mem.</th>
-              <th>Disco</th><th>Tipo disco</th><th>SO</th><th>Licencia</th><th>Comentarios</th><th>Registró</th><th></th>
+              <th>Disco</th><th>Tipo disco</th><th>SO</th><th>Licencia</th><th>Renting</th><th>Comentarios</th><th>Registró</th><th></th>
             </tr></thead>
             <tbody id="tablaEquipos"></tbody>
           </table>

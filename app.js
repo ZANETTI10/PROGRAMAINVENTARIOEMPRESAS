@@ -804,6 +804,14 @@ const CAMPOS_EQUIPO_DB = {
 };
 
 let equipoEditandoId = null;
+const equiposSeleccionadosCombinar = new Set();
+
+// El campo de codigo de renting solo tiene sentido si el equipo es de
+// renting -- se muestra/oculta segun la casilla, en vez de dejarlo
+// siempre visible aunque no aplique.
+$("eqEsRenting").addEventListener("change", () => {
+  $("eqCodigoRentingWrap").style.display = $("eqEsRenting").checked ? "block" : "none";
+});
 
 $("btnGuardarEquipo").addEventListener("click", async () => {
   $("equipoError").textContent = "";
@@ -821,6 +829,8 @@ $("btnGuardarEquipo").addEventListener("click", async () => {
   const registro = { empresa_id: empresaInvActual };
   CAMPOS_EQUIPO.forEach(([campo]) => { registro[CAMPOS_EQUIPO_DB[campo]] = valores[campo]; });
   if (!registro.registrado_por) registro.registrado_por = sesion.user.email;
+  registro.es_renting = $("eqEsRenting").checked;
+  registro.codigo_renting = registro.es_renting ? $("eqCodigoRenting").value.trim() : "";
 
   const { error } = equipoEditandoId
     ? await sb.from("equipos").update(registro).eq("id", equipoEditandoId)
@@ -837,6 +847,9 @@ $("btnGuardarEquipo").addEventListener("click", async () => {
 function cancelarEdicionEquipo() {
   equipoEditandoId = null;
   CAMPOS_EQUIPO.forEach(([, id]) => { if (id !== "eqRegistradoPor") $(id).value = ""; });
+  $("eqEsRenting").checked = false;
+  $("eqCodigoRenting").value = "";
+  $("eqCodigoRentingWrap").style.display = "none";
   $("equipoFormTitulo").textContent = "Registrar equipo";
   $("btnGuardarEquipo").textContent = "Guardar equipo";
   $("btnCancelarEdicionEquipo").style.display = "none";
@@ -896,9 +909,16 @@ async function cargarEquipos() {
   $("equiposEmpty").style.display = (data && data.length) ? "none" : "block";
   $("equiposEmpty").textContent = "Sin equipos para esta empresa todavía.";
 
+  // Los ids marcados para combinar que ya no existen en esta carga (se
+  // borraron, o se cambio de empresa) no deben seguir contando.
+  const idsEnEstaTabla = new Set((data || []).map((r) => r.id));
+  Array.from(equiposSeleccionadosCombinar).forEach((id) => { if (!idsEnEstaTabla.has(id)) equiposSeleccionadosCombinar.delete(id); });
+
   (data || []).forEach((r) => {
     const tr = document.createElement("tr");
+    const marcado = equiposSeleccionadosCombinar.has(r.id);
     tr.innerHTML = `
+      <td><input type="checkbox" class="chk-combinar-equipo" data-id="${r.id}" ${marcado ? "checked" : ""} title="Marcar para combinar con otro equipo" /></td>
       <td>${estadoAgenteEquipoHtml(r)}</td>
       <td>${fmtFecha(r.created_at)}</td><td>${escapeHtml(r.tipo_equipo)}</td>
       <td>${escapeHtml(r.nombre_red)}</td><td>${escapeHtml(r.sitio)}</td>
@@ -907,6 +927,7 @@ async function cargarEquipos() {
       <td>${escapeHtml(r.memoria_ram)}</td><td>${escapeHtml(r.tipo_memoria)}</td>
       <td>${escapeHtml(r.disco_duro)}</td><td>${escapeHtml(r.tipo_disco)}</td>
       <td>${escapeHtml(r.licencia_so)}</td><td>${escapeHtml(r.tipo_licencia)}</td>
+      <td>${r.es_renting ? `<span class="pill">${r.codigo_renting ? escapeHtml(r.codigo_renting) : "Renting"}</span>` : ""}</td>
       <td>${escapeHtml(r.comentarios)}</td><td>${escapeHtml(r.registrado_por)}</td>
       <td class="actions-cell">
         <button class="icon-btn" data-editar-equipo="${r.id}">Editar</button>
@@ -916,11 +937,23 @@ async function cargarEquipos() {
     tr.dataset.equipoJson = JSON.stringify(r);
   });
 
+  tbody.querySelectorAll(".chk-combinar-equipo").forEach((chk) => {
+    chk.addEventListener("change", () => {
+      if (chk.checked) equiposSeleccionadosCombinar.add(chk.dataset.id);
+      else equiposSeleccionadosCombinar.delete(chk.dataset.id);
+      actualizarBotonCombinarEquipos();
+    });
+  });
+  actualizarBotonCombinarEquipos();
+
   tbody.querySelectorAll("[data-editar-equipo]").forEach((b) => {
     b.addEventListener("click", () => {
       const r = JSON.parse(b.closest("tr").dataset.equipoJson);
       equipoEditandoId = r.id;
       CAMPOS_EQUIPO.forEach(([campo, id]) => { $(id).value = r[CAMPOS_EQUIPO_DB[campo]] || ""; });
+      $("eqEsRenting").checked = !!r.es_renting;
+      $("eqCodigoRenting").value = r.codigo_renting || "";
+      $("eqCodigoRentingWrap").style.display = r.es_renting ? "block" : "none";
       $("equipoFormTitulo").textContent = "Editar equipo";
       $("btnGuardarEquipo").textContent = "Guardar cambios";
       $("btnCancelarEdicionEquipo").style.display = "inline-block";
@@ -940,6 +973,85 @@ async function cargarEquipos() {
     });
   });
 }
+
+// ------------------------------------------------------------
+// Combinar equipos duplicados: pasa cuando el agente crea un equipo
+// nuevo en vez de actualizar uno que ya se habia cargado a mano,
+// porque el nombre de red/serial no coincidian exactamente. En vez de
+// dejar dos filas para el mismo equipo fisico, se marcan las dos (la
+// casilla de la izquierda) y se combinan en una sola: se completan los
+// campos vacios de una con los datos de la otra y se borra el
+// duplicado.
+// ------------------------------------------------------------
+function actualizarBotonCombinarEquipos() {
+  const boton = $("btnCombinarEquipos");
+  const n = equiposSeleccionadosCombinar.size;
+  boton.disabled = n !== 2;
+  boton.textContent = n === 2 ? "Combinar los 2 seleccionados" : `Combinar seleccionados (${n}/2)`;
+}
+
+function resumenEquipoParaElegir(r) {
+  const partes = [r.nombre_red, r.serial, r.tipo_equipo].filter(Boolean);
+  const origen = r.origen === "agente" ? "agente automático" : "cargado a mano";
+  return `${partes.join(" / ") || "(sin nombre ni serial)"} — ${origen}, ${fmtFecha(r.created_at)}`;
+}
+
+$("btnCombinarEquipos").addEventListener("click", async () => {
+  if (equiposSeleccionadosCombinar.size !== 2) return;
+  const [idA, idB] = Array.from(equiposSeleccionadosCombinar);
+  const filas = Array.from(document.querySelectorAll("#tablaEquipos tr")).map((tr) => JSON.parse(tr.dataset.equipoJson));
+  const rA = filas.find((r) => r.id === idA);
+  const rB = filas.find((r) => r.id === idB);
+  if (!rA || !rB) { toast("No se encontraron los dos equipos marcados, recarga e intenta de nuevo.", true); return; }
+
+  // Si uno de los dos viene del agente automático, ese se queda como
+  // principal (trae el estado de conexión en vivo); si los dos son del
+  // mismo tipo, se pregunta cuál conservar.
+  let principal, secundario;
+  if (rA.origen === "agente" && rB.origen !== "agente") { principal = rA; secundario = rB; }
+  else if (rB.origen === "agente" && rA.origen !== "agente") { principal = rB; secundario = rA; }
+  else {
+    const eleccion = prompt(
+      `¿Cuál de los dos equipos quieres conservar? (el otro se borra, pero sus datos se usan para completar al que quede)
+
+` +
+      `1) ${resumenEquipoParaElegir(rA)}
+` +
+      `2) ${resumenEquipoParaElegir(rB)}
+
+` +
+      `Escribe 1 o 2:`
+    );
+    if (eleccion === "1") { principal = rA; secundario = rB; }
+    else if (eleccion === "2") { principal = rB; secundario = rA; }
+    else return;
+  }
+
+  const CAMPOS_COMBINABLES = [
+    ...Object.values(CAMPOS_EQUIPO_DB),
+    "es_renting", "codigo_renting",
+  ];
+  const cambios = {};
+  CAMPOS_COMBINABLES.forEach((col) => {
+    const vacioEnPrincipal = principal[col] === null || principal[col] === undefined || principal[col] === "" || principal[col] === false;
+    const tieneValorEnSecundario = secundario[col] !== null && secundario[col] !== undefined && secundario[col] !== "" && secundario[col] !== false;
+    if (vacioEnPrincipal && tieneValorEnSecundario) cambios[col] = secundario[col];
+  });
+
+  if (!confirm(`Se va a quedar "${resumenEquipoParaElegir(principal)}", completado con los datos que tenga de más "${resumenEquipoParaElegir(secundario)}", y se va a borrar este último. ¿Combinar?`)) return;
+
+  if (Object.keys(cambios).length) {
+    const { error: errUpdate } = await sb.from("equipos").update(cambios).eq("id", principal.id);
+    if (errUpdate) { toast("Error al combinar: " + errUpdate.message, true); return; }
+  }
+  const { error: errDelete } = await sb.from("equipos").delete().eq("id", secundario.id);
+  if (errDelete) { toast("Error al borrar el duplicado: " + errDelete.message, true); return; }
+
+  equiposSeleccionadosCombinar.clear();
+  if (equipoEditandoId === secundario.id || equipoEditandoId === principal.id) cancelarEdicionEquipo();
+  toast("Equipos combinados en uno solo.");
+  await cargarEquipos();
+});
 
 // ------------------------------------------------------------
 // Agente automático de inventario: genera (o reutiliza, si ya hay
@@ -1006,7 +1118,8 @@ $("btnExportarInventario").addEventListener("click", async () => {
     Sitio: r.sitio, Responsable: r.responsable, Referencia: r.referencia, Serial: r.serial,
     Procesador: r.procesador, "Memoria RAM": r.memoria_ram, "Tipo de memoria": r.tipo_memoria,
     "Disco duro": r.disco_duro, "Tipo de disco": r.tipo_disco, "Sistema operativo": r.licencia_so,
-    "Tipo de licencia": r.tipo_licencia, Comentarios: r.comentarios, "Registrado por": r.registrado_por,
+    "Tipo de licencia": r.tipo_licencia, Renting: r.es_renting ? "Sí" : "No", "Código de renting": r.codigo_renting,
+    Comentarios: r.comentarios, "Registrado por": r.registrado_por,
   }));
   exportarExcel(filas, `Inventario - ${nombreEmpresa}.xlsx`, "Inventario");
 });
