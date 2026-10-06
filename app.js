@@ -778,6 +778,11 @@ $("invEmpresaSelect").addEventListener("change", async (e) => {
   cancelarEdicionEquipo();
   empresaInvActual = e.target.value || null;
   sincronizarEmpresaGlobal(empresaInvActual);
+  // El comando mostrado trae el token de la empresa anterior: se
+  // esconde al cambiar de empresa para no instalar sin querer el
+  // agente de una empresa en el equipo de otra.
+  $("agenteComandoWrap").style.display = "none";
+  $("agenteComando").value = "";
   await cargarEquipos();
 });
 
@@ -897,6 +902,60 @@ async function cargarEquipos() {
     });
   });
 }
+
+// ------------------------------------------------------------
+// Agente automático de inventario: genera (o reutiliza, si ya hay
+// una activa) el token de instalación de la empresa seleccionada y
+// arma el comando de PowerShell listo para pegar en el equipo del
+// cliente. El token solo sirve para que ESE equipo se anote en el
+// inventario de ESA empresa (ver supabase/functions/agente-inventario).
+// ------------------------------------------------------------
+$("btnGenerarComandoAgente").addEventListener("click", async () => {
+  if (!empresaInvActual) { toast("Selecciona una empresa primero.", true); return; }
+  const boton = $("btnGenerarComandoAgente");
+  boton.disabled = true;
+  try {
+    const { data: existente, error: errBuscar } = await sb
+      .from("equipos_tokens")
+      .select("token")
+      .eq("empresa_id", empresaInvActual)
+      .eq("activo", true)
+      .limit(1)
+      .maybeSingle();
+    if (errBuscar) { toast("Error al buscar el token: " + errBuscar.message, true); return; }
+
+    let token = existente?.token;
+    if (!token) {
+      token = crypto.randomUUID().replace(/-/g, "");
+      const { data: sesionData } = await sb.auth.getSession();
+      const { error: errCrear } = await sb.from("equipos_tokens").insert({
+        empresa_id: empresaInvActual,
+        token,
+        creado_por: sesionData?.session?.user?.email || null,
+      });
+      if (errCrear) { toast("Error al generar el token: " + errCrear.message, true); return; }
+    }
+
+    const comando = `$env:HDESKTI_TOKEN="${token}"; irm https://zanetti10.github.io/PROGRAMAINVENTARIOEMPRESAS/agente/instalar.ps1 | iex`;
+    $("agenteComando").value = comando;
+    $("agenteComandoWrap").style.display = "block";
+    toast(existente ? "Ya había un comando activo para esta empresa — aquí está." : "Comando generado.");
+  } finally {
+    boton.disabled = false;
+  }
+});
+
+$("btnCopiarComandoAgente").addEventListener("click", async () => {
+  const texto = $("agenteComando").value;
+  if (!texto) return;
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast("Comando copiado.");
+  } catch {
+    $("agenteComando").select();
+    toast("No se pudo copiar automático — está seleccionado, usa Ctrl+C.", true);
+  }
+});
 
 $("btnExportarInventario").addEventListener("click", async () => {
   if (!empresaInvActual) { toast("Selecciona una empresa primero.", true); return; }

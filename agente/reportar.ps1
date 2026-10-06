@@ -1,13 +1,15 @@
 # ============================================================
 # Helpdesk TI - reportar.ps1
 # ------------------------------------------------------------
-# Recolecta los datos basicos del equipo (procesador, RAM, disco,
-# sistema operativo, serial, etc.) y los envia al inventario. Este
-# script lo instala "instalar.ps1" (no se corre a mano normalmente):
-# queda guardado en C:\ProgramData\HelpdeskTI\reportar.ps1 y una Tarea
-# Programada lo ejecuta solo, en cada inicio de sesion y cada 6 horas,
-# para que el inventario se mantenga actualizado sin que nadie tenga
-# que volver a hacer nada.
+# Recolecta los datos basicos del equipo (procesador, RAM y su tipo,
+# disco y su tipo, sistema operativo, serial, etc.) y los envia al
+# inventario, junto con el "responsable" (quien usa el equipo) que se
+# haya guardado al instalar, si lo pusieron. Este script lo instala
+# "instalar.ps1" (no se corre a mano normalmente): queda guardado en
+# C:\ProgramData\HelpdeskTI\reportar.ps1 y una Tarea Programada lo
+# ejecuta solo, en cada inicio de sesion y cada 6 horas, para que el
+# inventario se mantenga actualizado sin que nadie tenga que volver a
+# hacer nada.
 #
 # No hay contrasenas de nada aqui: el "token" identifica la empresa,
 # no da acceso a otra cosa que anotar ESTE equipo en SU inventario.
@@ -59,6 +61,29 @@ function Obtener-TipoDisco {
   return $null
 }
 
+function Obtener-TipoMemoria {
+  try {
+    $modulo = Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction Stop | Select-Object -First 1
+    switch ($modulo.SMBIOSMemoryType) {
+      20 { return "DDR" }
+      21 { return "DDR2" }
+      24 { return "DDR3" }
+      26 { return "DDR4" }
+      34 { return "DDR5" }
+      default { return $null }
+    }
+  } catch { return $null }
+}
+
+function Obtener-Responsable {
+  $ruta = Join-Path $dir "responsable.txt"
+  if (Test-Path $ruta) {
+    $valor = (Get-Content -Path $ruta -Raw -ErrorAction SilentlyContinue)
+    if ($valor) { return $valor.Trim() }
+  }
+  return $null
+}
+
 try {
   $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
   $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
@@ -78,8 +103,10 @@ try {
     token       = $token
     tipo_equipo = Obtener-TipoEquipo
     nombre_red  = $env:COMPUTERNAME
+    responsable = Obtener-Responsable
     procesador  = if ($cpu) { $cpu.Name.Trim() } else { $null }
     memoria_ram = $memoriaTexto
+    tipo_memoria = Obtener-TipoMemoria
     disco_duro  = $discoTexto
     tipo_disco  = Obtener-TipoDisco
     licencia_so = if ($os) { "$($os.Caption) ($($os.Version))" } else { $null }

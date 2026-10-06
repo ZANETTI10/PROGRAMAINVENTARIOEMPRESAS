@@ -46,6 +46,7 @@ const CAMPOS_PERMITIDOS = [
   "tipo_equipo",
   "nombre_red",
   "sitio",
+  "responsable",
   "procesador",
   "memoria_ram",
   "tipo_memoria",

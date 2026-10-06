@@ -770,6 +770,18 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
+        <h3>Agente automático de inventario</h3>
+        <p class="sub" style="margin-top:-6px;">Instálalo en los equipos de esta empresa (Windows) para que se registren solos en el inventario cada 6 horas, sin digitarlos a mano.</p>
+        <button class="btn-secondary" style="width:auto;" id="btnGenerarComandoAgente" type="button">Generar comando de instalación</button>
+        <div id="agenteComandoWrap" style="display:none; margin-top:14px;">
+          <label for="agenteComando">Pega esto en PowerShell <strong>como Administrador</strong>, en el equipo del cliente</label>
+          <textarea id="agenteComando" rows="2" readonly style="font-family:monospace; font-size:12.5px;"></textarea>
+          <button class="btn-secondary" style="width:auto; margin-top:10px;" id="btnCopiarComandoAgente" type="button">Copiar comando</button>
+          <p class="sub" style="margin-top:10px;">Al correrlo va a preguntar el nombre de quien usa ese equipo (opcional, Enter lo deja en blanco) — así el inventario queda organizado por responsable, además de lo que detecta solo (procesador, RAM, disco, sistema operativo, serial).</p>
+        </div>
+      </div>
+
+      <div class="card">
         <h3 id="equipoFormTitulo">Registrar equipo</h3>
         <div class="form-grid">
           <div>
