@@ -791,7 +791,8 @@ const CAMPOS_EQUIPO = [
   ["responsable", "eqResponsable"], ["referencia", "eqReferencia"], ["serial", "eqSerial"],
   ["procesador", "eqProcesador"], ["memoriaRam", "eqRam"], ["tipoMemoria", "eqTipoMemoria"],
   ["discoDuro", "eqDisco"], ["tipoDisco", "eqTipoDisco"], ["licenciaSo", "eqLicenciaSO"],
-  ["tipoLicencia", "eqTipoLicencia"], ["comentarios", "eqComentarios"], ["registradoPor", "eqRegistradoPor"],
+  ["tipoLicencia", "eqTipoLicencia"], ["usuarioAdmin", "eqUsuarioAdmin"], ["passwordAdmin", "eqPasswordAdmin"],
+  ["comentarios", "eqComentarios"], ["registradoPor", "eqRegistradoPor"],
 ];
 // Nombre de columna real en la base de datos para cada campo del
 // formulario — se usa tanto para guardar (insertar/actualizar) como
@@ -800,7 +801,8 @@ const CAMPOS_EQUIPO_DB = {
   tipoEquipo: "tipo_equipo", nombreRed: "nombre_red", sitio: "sitio", responsable: "responsable",
   referencia: "referencia", serial: "serial", procesador: "procesador", memoriaRam: "memoria_ram",
   tipoMemoria: "tipo_memoria", discoDuro: "disco_duro", tipoDisco: "tipo_disco", licenciaSo: "licencia_so",
-  tipoLicencia: "tipo_licencia", comentarios: "comentarios", registradoPor: "registrado_por",
+  tipoLicencia: "tipo_licencia", usuarioAdmin: "usuario_admin", passwordAdmin: "password_admin",
+  comentarios: "comentarios", registradoPor: "registrado_por",
 };
 
 let equipoEditandoId = null;
@@ -1035,7 +1037,7 @@ $("btnCombinarEquipos").addEventListener("click", async () => {
     ...Object.values(CAMPOS_EQUIPO_DB),
     "es_renting", "codigo_renting", "renting_proveedor", "renting_inicio", "renting_fin",
     "ip_local", "usuario_sesion", "ultimo_reinicio", "windows_activado", "antivirus_estado",
-  ];
+  ]; // ya incluye usuario_admin/password_admin via CAMPOS_EQUIPO_DB
   const cambios = {};
   CAMPOS_COMBINABLES.forEach((col) => {
     const vacioEnPrincipal = principal[col] === null || principal[col] === undefined || principal[col] === "" || principal[col] === false;
@@ -1124,6 +1126,19 @@ function construirDetalleEquipoHtml(r) {
       </div>
     </div>`;
 
+  const seccionAcceso = (r.usuario_admin || r.password_admin) ? `
+    <div class="equipo-detalle-seccion">
+      <h4>Acceso (administrador local)</h4>
+      <div class="equipo-detalle-grid">
+        ${datoHtml("Usuario", r.usuario_admin)}
+        <div class="dato pw-cell">
+          <span class="et">Contraseña</span>
+          <span class="pw-value" data-pw-hidden="${escapeAttr(r.password_admin || "")}">${r.password_admin ? "••••••••" : "—"}</span>
+          ${r.password_admin ? '<button class="reveal-btn" data-toggle-pw type="button">ver</button>' : ""}
+        </div>
+      </div>
+    </div>` : "";
+
   const seccionRenting = r.es_renting ? `
     <div class="equipo-detalle-seccion">
       <h4>Renting</h4>
@@ -1145,39 +1160,112 @@ function construirDetalleEquipoHtml(r) {
       ${r.comentarios ? `<div class="dato" style="margin-top:10px;"><span class="et">Comentarios</span>${escapeHtml(r.comentarios)}</div>` : ""}
     </div>`;
 
-  return seccionConexion + seccionIdentificacion + seccionHardware + seccionSistema + seccionRenting + seccionRegistro;
+  return seccionConexion + seccionIdentificacion + seccionHardware + seccionSistema + seccionAcceso + seccionRenting + seccionRegistro;
+}
+
+const ACCIONES_REMOTAS = {
+  liberar_memoria: "Liberar memoria",
+  limpiar_temporales: "Limpiar temporales",
+  reiniciar_explorer: "Reiniciar Explorer",
+  reiniciar_equipo: "Reiniciar equipo",
+};
+const CONFIRMACIONES_ACCION_REMOTA = {
+  liberar_memoria: "¿Liberar memoria RAM en este equipo? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
+  limpiar_temporales: "¿Limpiar archivos temporales y vaciar la papelera de este equipo? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
+  reiniciar_explorer: "¿Reiniciar el Explorador de Windows (barra de tareas/escritorio) de este equipo? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
+  reiniciar_equipo: "¿Reiniciar este equipo por completo?\n\nLe va a aparecer un aviso en pantalla con 5 minutos de cuenta regresiva antes de reiniciar, para que la persona que lo esté usando pueda guardar lo que tenga abierto.\n\nSe ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
+};
+
+function seccionAccionesRemotasHtml(r) {
+  if (r.origen !== "agente") {
+    return '<div class="equipo-detalle-seccion"><h4>Acciones remotas</h4><p class="empty-state">Solo disponible en equipos con el agente automático instalado.</p></div>';
+  }
+  const botones = Object.entries(ACCIONES_REMOTAS).map(([accion, etiqueta]) => {
+    const estiloExtra = accion === "reiniciar_equipo" ? " border-color:var(--danger); color:var(--danger);" : "";
+    return `<button class="btn-secondary" style="width:auto;${estiloExtra}" data-queue-comando="${accion}" type="button">${etiqueta}</button>`;
+  }).join("");
+  return `
+    <div class="equipo-detalle-seccion">
+      <h4>Acciones remotas</h4>
+      <p class="sub" style="margin:0 0 10px;">Se ejecutan la próxima vez que el equipo consulte — hasta 15 minutos, no son instantáneas.</p>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">${botones}</div>
+      <div id="equipoDetalleComandosLista"><div class="dash-modal-cargando">Cargando…</div></div>
+    </div>`;
 }
 
 async function abrirDetalleEquipo(r) {
   $("equipoDetalleOverlay").dataset.equipoId = r.id;
   $("equipoDetalleTitulo").textContent = r.nombre_red || r.serial || "Equipo";
-  $("equipoDetalleBody").innerHTML = construirDetalleEquipoHtml(r) +
+  $("equipoDetalleBody").innerHTML = construirDetalleEquipoHtml(r) + seccionAccionesRemotasHtml(r) +
     '<div class="equipo-detalle-seccion"><h4>Historial de disco libre</h4><div class="dash-modal-cargando">Cargando…</div></div>';
   $("equipoDetalleOverlay").classList.add("abierto");
 
-  const { data, error } = await sb
-    .from("equipos_historial")
-    .select("creado_en, disco_libre_pct")
-    .eq("equipo_id", r.id)
-    .order("creado_en", { ascending: false })
-    .limit(15);
+  const [historialResp, comandosResp] = await Promise.all([
+    sb.from("equipos_historial").select("creado_en, disco_libre_pct").eq("equipo_id", r.id).order("creado_en", { ascending: false }).limit(15),
+    sb.from("equipos_comandos").select("accion, estado, creado_en, ejecutado_en, resultado").eq("equipo_id", r.id).order("creado_en", { ascending: false }).limit(5),
+  ]);
 
   // Si mientras se esperaba la respuesta ya se cerró este modal o se
   // abrió el de otro equipo, no pisar lo que esté mostrando ahora.
   if ($("equipoDetalleOverlay").dataset.equipoId !== r.id) return;
 
+  const { data, error } = historialResp;
   const historialHtml = (!error && data && data.length)
     ? `<ul class="equipo-detalle-historial">${data.map((h) => `<li>${fmtFecha(h.creado_en)} — ${h.disco_libre_pct != null && h.disco_libre_pct !== "" ? h.disco_libre_pct + "% libre" : "sin dato"}</li>`).join("")}</ul>`
     : '<p class="empty-state">Sin historial todavía — se va llenando solo con cada reporte del agente.</p>';
 
   const seccionHistorial = `<div class="equipo-detalle-seccion"><h4>Historial de disco libre (últimos reportes)</h4>${historialHtml}</div>`;
-  $("equipoDetalleBody").innerHTML = construirDetalleEquipoHtml(r) + seccionHistorial;
+  $("equipoDetalleBody").innerHTML = construirDetalleEquipoHtml(r) + seccionAccionesRemotasHtml(r) + seccionHistorial;
+
+  const comandosLista = $("equipoDetalleComandosLista");
+  if (comandosLista) {
+    const { data: comandos, error: errComandos } = comandosResp;
+    comandosLista.innerHTML = (!errComandos && comandos && comandos.length)
+      ? `<ul class="equipo-detalle-historial">${comandos.map((c) => {
+          const estadoTxt = c.estado === "pendiente" ? "pendiente" : (c.estado === "ejecutado" ? "listo" : "error");
+          const clase = c.estado === "pendiente" ? "pill-warn" : (c.estado === "ejecutado" ? "pill-ok" : "pill-bad");
+          return `<li><span class="pill ${clase}">${estadoTxt}</span> ${escapeHtml(ACCIONES_REMOTAS[c.accion] || c.accion)} — ${fmtFecha(c.creado_en)}${c.resultado ? ` — ${escapeHtml(c.resultado)}` : ""}</li>`;
+        }).join("")}</ul>`
+      : '<p class="empty-state">Sin acciones mandadas todavía.</p>';
+  }
 }
 
 function cerrarDetalleEquipo() {
   $("equipoDetalleOverlay").classList.remove("abierto");
   $("equipoDetalleOverlay").dataset.equipoId = "";
 }
+
+$("equipoDetalleBody").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-toggle-pw]");
+  if (!btn) return;
+  const span = btn.previousElementSibling;
+  const shown = span.dataset.shown === "1";
+  span.textContent = shown ? "••••••••" : (span.dataset.pwHidden || "(vacía)");
+  span.dataset.shown = shown ? "0" : "1";
+  btn.textContent = shown ? "ver" : "ocultar";
+});
+
+$("equipoDetalleBody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-queue-comando]");
+  if (!btn) return;
+  const accion = btn.dataset.queueComando;
+  const equipoId = $("equipoDetalleOverlay").dataset.equipoId;
+  if (!equipoId) return;
+  if (!confirm(CONFIRMACIONES_ACCION_REMOTA[accion] || "¿Ejecutar esta acción en el equipo?")) return;
+
+  btn.disabled = true;
+  const { data: sesionData } = await sb.auth.getSession();
+  const { error } = await sb.from("equipos_comandos").insert({
+    equipo_id: equipoId,
+    accion,
+    creado_por: sesionData?.session?.user?.email || null,
+  });
+  if (error) { toast("Error al mandar la acción: " + error.message, true); btn.disabled = false; return; }
+  toast("Acción en cola — se ejecuta la próxima vez que el equipo consulte.");
+
+  const { data: equipoFresco } = await sb.from("equipos").select("*").eq("id", equipoId).maybeSingle();
+  if (equipoFresco && $("equipoDetalleOverlay").dataset.equipoId === equipoId) abrirDetalleEquipo(equipoFresco);
+});
 
 $("btnCerrarEquipoDetalle").addEventListener("click", cerrarDetalleEquipo);
 $("equipoDetalleOverlay").addEventListener("click", (e) => {

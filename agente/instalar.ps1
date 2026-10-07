@@ -17,11 +17,17 @@
 #     desde la app. Tambien se puede pasar sin que pregunte nada con
 #     $env:HDESKTI_RESPONSABLE="Nombre" antes del comando.
 #  3. Descarga reportar.ps1 (el que de verdad recolecta y envia los
-#     datos) a esa misma carpeta.
-#  4. Crea una Tarea Programada que corre reportar.ps1 al iniciar
-#     sesion y cada 6 horas, como SYSTEM (para que siga reportando
-#     aunque nadie haya iniciado sesion) -- asi queda "instalado" de
-#     forma permanente, sin que haya que volver a correr nada.
+#     datos) y comandos.ps1 (el que revisa si desde la app le mandaron
+#     alguna accion remota) a esa misma carpeta.
+#  4. Crea DOS Tareas Programadas, ambas como SYSTEM (para que sigan
+#     corriendo aunque nadie haya iniciado sesion):
+#       - HelpdeskTI-Inventario: corre reportar.ps1 al iniciar sesion
+#         y cada 6 horas.
+#       - HelpdeskTI-Comandos: corre comandos.ps1 cada 15 minutos, por
+#         si hay alguna accion remota pendiente (liberar memoria,
+#         limpiar temporales, reiniciar explorer, reiniciar el equipo).
+#     Asi queda "instalado" de forma permanente, sin que haya que
+#     volver a correr nada.
 #  5. Corre reportar.ps1 una vez de inmediato, para que el equipo
 #     aparezca en el inventario ya mismo, sin esperar la primera vez
 #     que corra la tarea programada.
@@ -64,16 +70,25 @@ $reportarUrl = "https://zanetti10.github.io/PROGRAMAINVENTARIOEMPRESAS/agente/re
 $reportarPath = Join-Path $dir "reportar.ps1"
 Invoke-WebRequest -Uri $reportarUrl -OutFile $reportarPath -UseBasicParsing
 
-$taskName = "HelpdeskTI-Inventario"
-Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+$comandosUrl = "https://zanetti10.github.io/PROGRAMAINVENTARIOEMPRESAS/agente/comandos.ps1"
+$comandosPath = Join-Path $dir "comandos.ps1"
+Invoke-WebRequest -Uri $comandosUrl -OutFile $comandosPath -UseBasicParsing
 
-$accion = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$reportarPath`""
-$disparadorInicio = New-ScheduledTaskTrigger -AtStartup
-$disparadorPeriodico = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 6) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $config = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 
+$taskName = "HelpdeskTI-Inventario"
+Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+$accion = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$reportarPath`""
+$disparadorInicio = New-ScheduledTaskTrigger -AtStartup
+$disparadorPeriodico = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 6) -RepetitionDuration (New-TimeSpan -Days 3650)
 Register-ScheduledTask -TaskName $taskName -Action $accion -Trigger @($disparadorInicio, $disparadorPeriodico) -Principal $principal -Settings $config -Description "Helpdesk TI: reporta este equipo al inventario automaticamente." -Force | Out-Null
+
+$taskNameComandos = "HelpdeskTI-Comandos"
+Unregister-ScheduledTask -TaskName $taskNameComandos -Confirm:$false -ErrorAction SilentlyContinue
+$accionComandos = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$comandosPath`""
+$disparadorComandos = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650)
+Register-ScheduledTask -TaskName $taskNameComandos -Action $accionComandos -Trigger $disparadorComandos -Principal $principal -Settings $config -Description "Helpdesk TI: revisa cada 15 min si hay una accion remota pendiente (liberar memoria, limpiar temporales, etc.)." -Force | Out-Null
 
 Write-Host "Agente instalado. Registrando este equipo en el inventario ahora..." -ForegroundColor Green
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $reportarPath
@@ -84,4 +99,4 @@ if (Test-Path $logPath) {
   Get-Content -Path $logPath -Tail 1
 }
 
-Write-Host "Listo. Este equipo va a seguir reportandose solo cada 6 horas y en cada inicio." -ForegroundColor Green
+Write-Host "Listo. Este equipo va a seguir reportandose solo cada 6 horas (y en cada inicio), y va a revisar acciones remotas pendientes cada 15 minutos." -ForegroundColor Green
