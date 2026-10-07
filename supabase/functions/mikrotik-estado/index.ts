@@ -308,7 +308,22 @@ async function consultarRouterConLimite(r: Record<string, any>, detalle: boolean
 // trae el estado general — este segundo modo, más liviano, es el que usa
 // el dashboard cuando consulta muchas empresas/routers a la vez.
 async function consultarRouter(r: Record<string, any>, detalle = true) {
-  const base = { id: r.id, nombre: r.nombre };
+  const base = {
+    id: r.id,
+    nombre: r.nombre,
+    via_agente: !!r.via_agente,
+    agente_en_linea: r.agente_en_linea ?? null,
+    agente_actualizado_en: r.agente_actualizado_en ?? null,
+  };
+
+  // Este router no tiene IP publica: nunca se va a poder conectar desde
+  // la nube (ni vale la pena intentarlo y esperar el timeout). Su estado
+  // viene de un PC con el agente instalado en la misma red del router --
+  // ver agente-comandos / comandos.ps1 -- y ya viene en "base" arriba.
+  if (r.via_agente) {
+    return { ...base, conectado: false, monitoreado_por_agente: true };
+  }
+
   let api: MikrotikApi | null = null;
 
   try {

@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
       }
       const { data, error } = await admin
         .from("mikrotik_routers")
-        .select("id, empresa_id, nombre, host, puerto, ssl, wan_interface, lan_interface, usuario")
+        .select("id, empresa_id, nombre, host, puerto, ssl, wan_interface, lan_interface, usuario, via_agente")
         .eq("empresa_id", body.empresa_id)
         .order("nombre");
 
@@ -260,12 +260,19 @@ Deno.serve(async (req) => {
       const host = (body.host || "").trim();
       const usuario = (body.usuario || "").trim();
       const password = (body.password || "").trim();
+      const viaAgente = !!body.via_agente;
 
-      if (!empresaId || !host || !usuario) {
-        return json({ error: "Faltan datos del router (empresa, host o usuario)." }, 400);
+      if (!empresaId || !host) {
+        return json({ error: "Faltan datos del router (empresa o host)." }, 400);
       }
-      if (!body.id && !password) {
-        return json({ error: "Escribe la contraseña del router." }, 400);
+      // Un router "sin IP pública" se revisa desde el PC-agente de la
+      // misma red (solo necesita host+puerto, ver agente-comandos /
+      // comandos.ps1) -- no hace falta pedir usuario/contraseña del
+      // router para eso, a diferencia de los que sí se conectan desde
+      // la nube (mikrotik-estado), donde sí son indispensables.
+      if (!viaAgente) {
+        if (!usuario) return json({ error: "Escribe el usuario del router." }, 400);
+        if (!body.id && !password) return json({ error: "Escribe la contraseña del router." }, 400);
       }
 
       const fila: Record<string, unknown> = {
@@ -277,6 +284,7 @@ Deno.serve(async (req) => {
         ssl: !!body.ssl,
         wan_interface: (body.wan_interface || "ether1").trim(),
         lan_interface: (body.lan_interface || "bridge").trim(),
+        via_agente: viaAgente,
       };
       if (password) fila.password = password;
 
@@ -285,6 +293,7 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 400);
       } else {
         fila.password = password;
+        fila.usuario = usuario; // asegura NOT NULL (puede quedar "" si via_agente y no se dio usuario)
         const { error } = await admin.from("mikrotik_routers").insert(fila);
         if (error) return json({ error: error.message }, 400);
       }

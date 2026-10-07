@@ -743,6 +743,10 @@ tbody tr:last-child td { border-bottom: none; }
             <label for="nuevaEmpresaNombre">Nombre</label>
             <input type="text" id="nuevaEmpresaNombre" placeholder="Ej: Finca San Cayetano" />
           </div>
+          <div class="field">
+            <label for="nuevaEmpresaHorario">Horario de atención</label>
+            <input type="text" id="nuevaEmpresaHorario" placeholder="Ej: Lunes a sábado, 8am - 6pm" />
+          </div>
           <button class="btn-primary" style="margin-top:0; width:auto;" id="btnCrearEmpresa">Agregar</button>
           <button class="btn-secondary" style="margin-top:0; width:auto; display:none;" id="btnCancelarEdicionEmpresa" type="button">Cancelar</button>
         </div>
@@ -752,7 +756,7 @@ tbody tr:last-child td { border-bottom: none; }
         <h3>Listado</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Empresa</th><th>Equipos</th><th>Credenciales</th><th></th></tr></thead>
+            <thead><tr><th>Empresa</th><th>Horario</th><th>Equipos</th><th>Credenciales</th><th></th></tr></thead>
             <tbody id="tablaEmpresas"></tbody>
           </table>
         </div>
@@ -948,6 +952,21 @@ tbody tr:last-child td { border-bottom: none; }
         <p class="empty-state" id="servidoresEmpty" style="display:none;">Todavía no hay servidores registrados para vigilar en esta empresa.</p>
       </div>
 
+      <div class="card" id="impresorasCard" style="display:none;">
+        <h3>Impresoras</h3>
+        <p class="sub" style="margin:-10px 0 16px;">Se revisan por la red local de un PC con el agente instalado en esta empresa (ping cada 15 min) — por eso funcionan incluso sin IP pública en el sitio.</p>
+        <div class="toolbar">
+          <div class="field"><label for="impNombre">Nombre</label><input id="impNombre" placeholder="Ej: Impresora recepción" /></div>
+          <div class="field"><label for="impUbicacion">Dónde está</label><input id="impUbicacion" placeholder="Ej: Oficina administrativa" /></div>
+          <div class="field"><label for="impIp">IP (dentro de la red del cliente)</label><input id="impIp" placeholder="Ej: 192.168.88.60" /></div>
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarImpresora">Agregar</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionImpresora" type="button">Cancelar</button>
+        </div>
+        <div class="error-msg" id="impresoraError"></div>
+        <div class="mon-conn-grid" id="impresorasGrid"></div>
+        <p class="empty-state" id="impresorasEmpty" style="display:none;">Todavía no hay impresoras registradas para vigilar en esta empresa.</p>
+      </div>
+
       <button class="mon-toggle" id="btnToggleConfigRouter" type="button" style="display:none;">
         <span class="chev">▾</span> <span id="btnToggleConfigRouterTexto">Agregar / configurar router</span>
       </button>
@@ -965,6 +984,11 @@ tbody tr:last-child td { border-bottom: none; }
               <input id="routerSsl" type="checkbox" style="width:auto;" /> Usar API-SSL
             </label>
           </div>
+          <div>
+            <label for="routerViaAgente" style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-size:0.85rem; color:var(--text); margin-top:22px;">
+              <input id="routerViaAgente" type="checkbox" style="width:auto;" /> Este sitio no tiene IP pública
+            </label>
+          </div>
           <div><label for="routerWan">Interfaz WAN</label><input id="routerWan" placeholder="Ej: ether1" value="ether1" /></div>
           <div><label for="routerLan">Interfaz LAN</label><input id="routerLan" placeholder="Ej: bridge" value="bridge" /></div>
         </div>
@@ -972,6 +996,7 @@ tbody tr:last-child td { border-bottom: none; }
           <button class="btn-secondary" style="width:auto; margin-top:0;" id="btnDetectarInterfaces" type="button">🔍 Detectar interfaces del router</button>
         </div>
         <p class="sub" id="detectarInterfacesInfo" style="margin-top:10px; display:none;"></p>
+        <p class="sub" id="routerViaAgenteInfo" style="margin-top:10px; display:none;">Como este router no tiene IP pública, la nube no puede conectarse a él directamente. Su estado (en línea / sin respuesta) lo reporta un PC con el agente de Helpdesk TI instalado en esta misma red, cada vez que sondea (cada 15 min) — no hace falta usuario/contraseña del router para esto, solo la IP local y el puerto de la API.</p>
         <div style="display:flex; gap:10px; margin-top:18px;">
           <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarRouter">Guardar router</button>
           <button class="btn-secondary" style="display:none;" id="btnCancelarEdicionRouter">Cancelar</button>

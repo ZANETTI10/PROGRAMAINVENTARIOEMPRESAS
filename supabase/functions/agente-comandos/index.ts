@@ -7,6 +7,17 @@
 // modo "consultar", y cuando termina de ejecutar una acción avisa
 // con modo "completar".
 //
+// La misma consulta ("consultar") también devuelve, para la empresa
+// del token, las impresoras y los routers MikroTik marcados
+// "via_agente" (sitios sin IP pública, donde la nube no puede conectarse
+// directo al router) -- cosas que el agente debe revisar por su propia
+// red local cada vez que sondea (cada 15 min). El agente hace esas
+// revisiones (ping a la impresora, intento de conexión al puerto de la
+// API del router) y avisa el resultado con modo "estado_red". Cualquier
+// PC de la empresa que tenga el agente instalado puede reportar esto --
+// no hace falta designar un PC especial como "puente": todos están en la
+// misma red del sitio, así que si uno está apagado otro cubre igual.
+//
 // Igual que agente-inventario: no hay sesión de usuario acá (el
 // equipo del cliente no inicia sesión en la app), así que esta
 // función debe quedar con "Verify JWT" DESACTIVADO en el panel de
@@ -85,15 +96,60 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    // modo "consultar" (por defecto): resolver a qué equipo pertenece
-    // este reporte (igual que agente-inventario: primero por serial,
-    // si no por nombre de red) y devolver el comando pendiente más
-    // viejo, si hay alguno. Uno a la vez: el agente avisa con
-    // "completar" antes de que el siguiente sondeo le mande otro.
+    if (modo === "estado_red") {
+      // El agente reporta lo que vio en SU red local: impresoras (ping)
+      // y routers sin IP pública (conexión al puerto de la API). Se
+      // revalida que cada id pertenezca a esta misma empresa -- el
+      // token no da acceso a tocar datos de otra empresa.
+      const ahora = new Date().toISOString();
+      const impresoras = Array.isArray(body.impresoras) ? body.impresoras : [];
+      const mikrotik = Array.isArray(body.mikrotik) ? body.mikrotik : [];
+
+      for (const item of impresoras) {
+        const id = String(item?.id || "").trim();
+        if (!id) continue;
+        await admin
+          .from("impresoras")
+          .update({ en_linea: !!item.en_linea, actualizado_en: ahora })
+          .eq("id", id)
+          .eq("empresa_id", empresaId);
+      }
+
+      for (const item of mikrotik) {
+        const id = String(item?.id || "").trim();
+        if (!id) continue;
+        await admin
+          .from("mikrotik_routers")
+          .update({ agente_en_linea: !!item.en_linea, agente_actualizado_en: ahora })
+          .eq("id", id)
+          .eq("empresa_id", empresaId)
+          .eq("via_agente", true);
+      }
+
+      return json({ ok: true });
+    }
+
+    // modo "consultar" (por defecto): además de la acción pendiente
+    // (si hay alguna, para el equipo que reporta), siempre devuelve las
+    // impresoras y los routers "via_agente" de esta empresa, para que
+    // el agente los revise por su red local en esta misma pasada.
+    const [{ data: impresoras }, { data: mikrotikAgente }] = await Promise.all([
+      admin.from("impresoras").select("id, ip_local").eq("empresa_id", empresaId),
+      admin.from("mikrotik_routers").select("id, host, puerto").eq("empresa_id", empresaId).eq("via_agente", true),
+    ]);
+
+    const respuestaBase = {
+      ok: true,
+      impresoras: impresoras || [],
+      mikrotik: mikrotikAgente || [],
+    };
+
     const serial = body.serial ? String(body.serial).trim() : "";
     const nombreRed = body.nombre_red ? String(body.nombre_red).trim() : "";
     if (!serial && !nombreRed) {
-      return json({ error: "Faltan datos del equipo (serial o nombre de red)." }, 400);
+      // No hay forma de identificar el equipo (poco común) -- aun así
+      // se devuelve lo de impresoras/mikrotik, solo que sin comando.
+      return json({ ...respuestaBase, comando: null });
     }
 
     let equipo: { id: string } | null = null;
@@ -116,7 +172,7 @@ Deno.serve(async (req) => {
       equipo = data;
     }
 
-    if (!equipo) return json({ ok: true, comando: null });
+    if (!equipo) return json({ ...respuestaBase, comando: null });
 
     const { data: pendiente, error: errPendiente } = await admin
       .from("equipos_comandos")
@@ -129,7 +185,7 @@ Deno.serve(async (req) => {
 
     if (errPendiente) return json({ error: errPendiente.message }, 400);
 
-    return json({ ok: true, comando: pendiente || null });
+    return json({ ...respuestaBase, comando: pendiente || null });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }

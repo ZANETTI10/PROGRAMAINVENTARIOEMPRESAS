@@ -704,6 +704,7 @@ async function cargarEmpresas() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(emp.nombre)}</td>
+      <td>${emp.horario_atencion ? escapeHtml(emp.horario_atencion) : "<span class=\"sub\">Sin definir</span>"}</td>
       <td><span class="pill">${contarEq(emp.id)}</span></td>
       <td><span class="pill">${contarCred(emp.id)}</span></td>
       <td class="actions-cell">
@@ -719,6 +720,7 @@ async function cargarEmpresas() {
       const emp = JSON.parse(b.closest("tr").dataset.empresaJson);
       empresaEditandoId = emp.id;
       $("nuevaEmpresaNombre").value = emp.nombre || "";
+      $("nuevaEmpresaHorario").value = emp.horario_atencion || "";
       $("empresaFormTitulo").textContent = "Editar empresa";
       $("btnCrearEmpresa").textContent = "Guardar cambios";
       $("btnCancelarEdicionEmpresa").style.display = "inline-block";
@@ -744,10 +746,11 @@ let empresaEditandoId = null;
 
 $("btnCrearEmpresa").addEventListener("click", async () => {
   const nombre = $("nuevaEmpresaNombre").value.trim();
+  const horario_atencion = $("nuevaEmpresaHorario").value.trim() || null;
   if (!nombre) { toast("Escribe el nombre de la empresa.", true); return; }
   const { error } = empresaEditandoId
-    ? await sb.from("empresas").update({ nombre }).eq("id", empresaEditandoId)
-    : await sb.from("empresas").insert({ nombre });
+    ? await sb.from("empresas").update({ nombre, horario_atencion }).eq("id", empresaEditandoId)
+    : await sb.from("empresas").insert({ nombre, horario_atencion });
   if (error) { toast("Error al " + (empresaEditandoId ? "actualizar" : "crear") + ": " + error.message, true); return; }
   toast(empresaEditandoId ? "Empresa actualizada." : "Empresa agregada.");
   cancelarEdicionEmpresa();
@@ -757,6 +760,7 @@ $("btnCrearEmpresa").addEventListener("click", async () => {
 function cancelarEdicionEmpresa() {
   empresaEditandoId = null;
   $("nuevaEmpresaNombre").value = "";
+  $("nuevaEmpresaHorario").value = "";
   $("empresaFormTitulo").textContent = "Nueva empresa";
   $("btnCrearEmpresa").textContent = "Agregar";
   $("btnCancelarEdicionEmpresa").style.display = "none";
@@ -1542,14 +1546,18 @@ $("monEmpresaSelect").addEventListener("change", async (e) => {
   $("monMensaje").textContent = empresaMonitoreoActual ? "Da clic en \"Verificar ahora\" para ver el estado." : "Selecciona una empresa arriba.";
 
   cancelarEdicionServidor();
+  cancelarEdicionImpresora();
   $("servidoresCard").style.display = empresaMonitoreoActual ? "block" : "none";
+  $("impresorasCard").style.display = empresaMonitoreoActual ? "block" : "none";
   if (empresaMonitoreoActual) {
     await cargarRoutersDeEmpresaActual();
     await cargarServidores();
+    await cargarImpresoras();
   } else {
     routersDeEmpresaActual = [];
     actualizarSelectorRouterServidor();
     $("servidoresGrid").innerHTML = "";
+    $("impresorasGrid").innerHTML = "";
   }
 
   if (perfil.rol === "admin") {
@@ -1791,6 +1799,25 @@ function pintarDiagnostico(diagnostico) {
 let monToggleSeq = 0;
 
 function pintarRouterEstado(r) {
+  // Router sin IP pública: nunca se intenta conectar desde la nube (ver
+  // mikrotik-estado). Su estado viene de un PC con el agente instalado
+  // en su misma red local, que lo revisa cada 15 min -- se muestra lo
+  // último que reportó, en vez del mensaje de error genérico.
+  if (r.monitoreado_por_agente) {
+    const sinDatos = r.agente_en_linea == null;
+    const pillClase = sinDatos ? "pill-warn" : (r.agente_en_linea ? "pill-ok" : "pill-bad");
+    const pillTexto = sinDatos ? "Sin revisar aún" : (r.agente_en_linea ? "● En línea" : "Sin respuesta");
+    const detalle = sinDatos
+      ? "Se revisará en el próximo sondeo del agente (cada 15 min) en un PC de esta empresa."
+      : `Revisado por el agente ${formatearHaceTiempo(r.agente_actualizado_en)} (cada 15 min).`;
+    return `
+      <div class="card mon-card">
+        <h3>${escapeHtml(r.nombre)} <span class="pill ${pillClase}">${pillTexto}</span></h3>
+        <p class="sub" style="margin:0;">Sitio sin IP pública: monitoreado por un PC con el agente de Helpdesk TI instalado en su misma red, no por conexión directa desde la nube.</p>
+        <div class="mon-conn-speed" style="margin-top:8px;">${detalle}</div>
+      </div>`;
+  }
+
   if (!r.conectado) {
     return `
       <div class="card mon-card">
@@ -1872,10 +1899,16 @@ $("btnGuardarRouter").addEventListener("click", async () => {
   const host = $("routerHost").value.trim();
   const usuario = $("routerUsuario").value.trim();
   const password = $("routerPassword").value;
+  const viaAgente = $("routerViaAgente").checked;
 
-  if (!host) { $("routerError").textContent = "Escribe la IP o dominio del router."; return; }
-  if (!usuario) { $("routerError").textContent = "Escribe el usuario del router."; return; }
-  if (!routerEditandoId && !password) { $("routerError").textContent = "Escribe la contraseña del router."; return; }
+  if (!host) { $("routerError").textContent = "Escribe la IP local del router."; return; }
+  // Un router "sin IP pública" no necesita usuario/contraseña para este
+  // tipo de monitoreo (solo lo revisa el agente por TCP, no inicia
+  // sesión en la API) -- ver nota junto al checkbox.
+  if (!viaAgente) {
+    if (!usuario) { $("routerError").textContent = "Escribe el usuario del router."; return; }
+    if (!routerEditandoId && !password) { $("routerError").textContent = "Escribe la contraseña del router."; return; }
+  }
 
   const cuerpo = {
     accion: "guardar",
@@ -1889,6 +1922,7 @@ $("btnGuardarRouter").addEventListener("click", async () => {
     ssl: $("routerSsl").checked,
     wan_interface: $("routerWan").value.trim() || "ether1",
     lan_interface: $("routerLan").value.trim() || "bridge",
+    via_agente: viaAgente,
   };
 
   $("btnGuardarRouter").disabled = true;
@@ -1917,6 +1951,8 @@ function cancelarEdicionRouter() {
   $("routerPassword").value = "";
   $("routerPassword").placeholder = "Contraseña del router";
   $("routerSsl").checked = false;
+  $("routerViaAgente").checked = false;
+  $("routerViaAgenteInfo").style.display = "none";
   $("routerWan").value = "ether1";
   $("routerLan").value = "bridge";
   $("routerFormTitulo").textContent = "Agregar router";
@@ -1926,6 +1962,10 @@ function cancelarEdicionRouter() {
   $("detectarInterfacesInfo").style.display = "none";
   $("detectarInterfacesInfo").textContent = "";
 }
+
+$("routerViaAgente").addEventListener("change", () => {
+  $("routerViaAgenteInfo").style.display = $("routerViaAgente").checked ? "block" : "none";
+});
 
 // Se conecta de verdad al router (con los datos que haya en el
 // formulario en ese momento) y trae su lista real de interfaces, más
@@ -2006,7 +2046,7 @@ async function cargarRoutersConfigurados() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${escapeHtml(r.nombre)}</td>
-      <td>${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}</td>
+      <td>${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}${r.via_agente ? ` <span class="pill pill-warn">Vía agente</span>` : ""}</td>
       <td>${escapeHtml(r.wan_interface)} / ${escapeHtml(r.lan_interface)}</td>
       <td class="actions-cell">
         <button class="icon-btn" data-hora-router-tabla="${r.id}" data-hora-nombre="${escapeAttr(r.nombre || "")}">Hora CO</button>
@@ -2029,6 +2069,8 @@ async function cargarRoutersConfigurados() {
       $("routerPassword").value = "";
       $("routerPassword").placeholder = "Deja en blanco para no cambiarla";
       $("routerSsl").checked = !!r.ssl;
+      $("routerViaAgente").checked = !!r.via_agente;
+      $("routerViaAgenteInfo").style.display = r.via_agente ? "block" : "none";
       $("routerWan").value = r.wan_interface || "ether1";
       $("routerLan").value = r.lan_interface || "bridge";
       $("routerFormTitulo").textContent = "Editar router";
@@ -2241,6 +2283,124 @@ $("btnGuardarServidor").addEventListener("click", async () => {
   toast(servidorEditandoId ? "Servidor actualizado." : "Servidor agregado — se revisa en el próximo chequeo.");
   cancelarEdicionServidor();
   await cargarServidores();
+});
+
+// ------------------------------------------------------------
+// Impresoras: igual que los routers "sin IP pública", el estado
+// (en línea / sin respuesta) no lo consulta la nube directamente --
+// lo reporta un PC con el agente instalado en la misma red de la
+// empresa, haciendo ping a la IP local cada vez que sondea (cada 15
+// min, ver agente-comandos / comandos.ps1). Por eso funciona igual
+// de bien con o sin IP pública en el sitio.
+// ------------------------------------------------------------
+
+let impresoraEditandoId = null;
+
+function pintarImpresoraCard(imp) {
+  const sinDatos = imp.actualizado_en == null;
+  const enLinea = imp.en_linea;
+  const clase = sinDatos ? "" : (enLinea ? "mon-conn-ok" : "mon-conn-bad");
+  const pillClase = sinDatos ? "pill-warn" : (enLinea ? "pill-ok" : "pill-bad");
+  const pillTexto = sinDatos ? "Sin revisar aún" : (enLinea ? "En línea" : "Sin respuesta");
+  const detalle = sinDatos
+    ? "Se revisará en el próximo sondeo del agente (cada 15 min) en un PC de esta empresa."
+    : `Revisado hace ${formatearHaceTiempo(imp.actualizado_en)}.`;
+
+  return `
+    <div class="mon-conn-card ${clase}" data-impresora-json="${escapeAttr(JSON.stringify(imp))}">
+      <div class="mon-conn-top">
+        <span class="mon-conn-title">🖨️ ${escapeHtml(imp.nombre)} <span class="mon-conn-if">(${escapeHtml(imp.ip_local)})</span></span>
+        <span class="pill ${pillClase}">${pillTexto}</span>
+      </div>
+      <div class="mon-conn-speed">${imp.ubicacion ? escapeHtml(imp.ubicacion) + " · " : ""}${detalle}</div>
+      <div class="actions-cell" style="margin-top:10px;">
+        <button class="icon-btn" data-editar-impresora="${imp.id}">Editar</button>
+        <button class="icon-btn danger" data-borrar-impresora="${imp.id}">Eliminar</button>
+      </div>
+    </div>`;
+}
+
+async function cargarImpresoras() {
+  const grid = $("impresorasGrid");
+  if (!grid || !empresaMonitoreoActual) return;
+
+  const { data, error } = await sb
+    .from("impresoras")
+    .select("*")
+    .eq("empresa_id", empresaMonitoreoActual)
+    .order("nombre");
+
+  if (error) { toast("Error al cargar impresoras: " + error.message, true); return; }
+
+  const impresoras = data || [];
+  $("impresorasEmpty").style.display = impresoras.length ? "none" : "block";
+  grid.innerHTML = impresoras.map(pintarImpresoraCard).join("");
+  engancharAccionesImpresoras();
+}
+
+function engancharAccionesImpresoras() {
+  const grid = $("impresorasGrid");
+  if (!grid) return;
+
+  grid.querySelectorAll("[data-editar-impresora]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const imp = JSON.parse(b.closest("[data-impresora-json]").dataset.impresoraJson);
+      impresoraEditandoId = imp.id;
+      $("impNombre").value = imp.nombre || "";
+      $("impUbicacion").value = imp.ubicacion || "";
+      $("impIp").value = imp.ip_local || "";
+      $("btnGuardarImpresora").textContent = "Guardar cambios";
+      $("btnCancelarEdicionImpresora").style.display = "inline-block";
+      $("impresoraError").textContent = "";
+    });
+  });
+
+  grid.querySelectorAll("[data-borrar-impresora]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("¿Dejar de vigilar esta impresora?")) return;
+      const { error } = await sb.from("impresoras").delete().eq("id", b.dataset.borrarImpresora);
+      if (error) { toast("Error al eliminar: " + error.message, true); return; }
+      toast("Impresora eliminada.");
+      cancelarEdicionImpresora();
+      await cargarImpresoras();
+    });
+  });
+}
+
+function cancelarEdicionImpresora() {
+  impresoraEditandoId = null;
+  if (!$("impNombre")) return;
+  $("impNombre").value = "";
+  $("impUbicacion").value = "";
+  $("impIp").value = "";
+  $("btnGuardarImpresora").textContent = "Agregar";
+  $("btnCancelarEdicionImpresora").style.display = "none";
+  $("impresoraError").textContent = "";
+}
+
+$("btnCancelarEdicionImpresora").addEventListener("click", cancelarEdicionImpresora);
+
+$("btnGuardarImpresora").addEventListener("click", async () => {
+  $("impresoraError").textContent = "";
+  if (!empresaMonitoreoActual) { $("impresoraError").textContent = "Selecciona una empresa arriba."; return; }
+
+  const nombre = $("impNombre").value.trim();
+  const ubicacion = $("impUbicacion").value.trim() || null;
+  const ip_local = $("impIp").value.trim();
+  if (!nombre) { $("impresoraError").textContent = "Escribe un nombre para la impresora."; return; }
+  if (!ip_local) { $("impresoraError").textContent = "Escribe la IP local de la impresora."; return; }
+
+  $("btnGuardarImpresora").disabled = true;
+  const { error } = impresoraEditandoId
+    ? await sb.from("impresoras").update({ nombre, ubicacion, ip_local }).eq("id", impresoraEditandoId)
+    : await sb.from("impresoras").insert({ nombre, ubicacion, ip_local, empresa_id: empresaMonitoreoActual });
+  $("btnGuardarImpresora").disabled = false;
+
+  if (error) { $("impresoraError").textContent = "Error: " + error.message; return; }
+
+  toast(impresoraEditandoId ? "Impresora actualizada." : "Impresora agregada — se revisa en el próximo sondeo del agente (cada 15 min).");
+  cancelarEdicionImpresora();
+  await cargarImpresoras();
 });
 
 // ------------------------------------------------------------
