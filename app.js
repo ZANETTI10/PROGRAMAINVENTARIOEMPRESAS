@@ -904,20 +904,58 @@ autoRefreshInvTimer = setInterval(() => {
   if (vistaInventarioActiva() && empresaInvActual) cargarEquipos();
 }, 30 * 1000);
 
+// Resumen de salud del inventario de una empresa: de un vistazo, antes
+// de revisar equipo por equipo, cuántos están bien, cuántos con
+// advertencia, cuántos necesitan atención y cuántos no tienen agente
+// instalado (por eso no hay dato "vivo" para evaluarlos). Mismo criterio
+// que usa la fila para pintar el estado, para que la franja de arriba y
+// la tabla de abajo siempre cuenten la misma historia.
+function estadoEquipoInventario(r) {
+  if (r.origen !== "agente") return "manual";
+  const minutos = r.actualizado_en ? (Date.now() - new Date(r.actualizado_en).getTime()) / 60000 : Infinity;
+  const disco = parseFloat(r.disco_libre_pct);
+  const discoValido = !Number.isNaN(disco);
+  if (minutos > 48 * 60 || (discoValido && disco < 10)) return "critico";
+  if (minutos > 7 * 60 || (discoValido && disco < 20)) return "advertencia";
+  return "en_linea";
+}
+
+function pintarResumenInventario(data) {
+  const el = $("inventarioResumen");
+  if (!data || !data.length) { el.style.display = "none"; return; }
+
+  let ok = 0, advertencia = 0, critico = 0, manual = 0;
+  data.forEach((r) => {
+    const estado = estadoEquipoInventario(r);
+    if (estado === "critico") critico++;
+    else if (estado === "advertencia") advertencia++;
+    else if (estado === "manual") manual++;
+    else ok++;
+  });
+
+  el.innerHTML = `
+    <div class="dash-resumen-item dr-ok"><div class="dr-icon">✓</div><span class="dr-num">${ok}</span><span class="dr-label">En línea</span></div>
+    <div class="dash-resumen-item dr-warn"><div class="dr-icon">⚠️</div><span class="dr-num">${advertencia}</span><span class="dr-label">Con advertencia</span></div>
+    <div class="dash-resumen-item dr-bad"><div class="dr-icon">⛔</div><span class="dr-num">${critico}</span><span class="dr-label">Necesitan atención</span></div>
+    <div class="dash-resumen-item dr-muted"><div class="dr-icon">○</div><span class="dr-num">${manual}</span><span class="dr-label">Sin agente</span></div>`;
+  el.style.display = "grid";
+}
+
 async function cargarEquipos() {
   const tbody = $("tablaEquipos");
   tbody.innerHTML = "";
-  if (!empresaInvActual) { $("equiposEmpty").style.display = "block"; $("equiposEmpty").textContent = "Selecciona una empresa arriba."; return; }
+  if (!empresaInvActual) { $("equiposEmpty").style.display = "block"; $("equiposEmpty").textContent = "Selecciona una empresa arriba."; $("inventarioResumen").style.display = "none"; return; }
 
   const { data, error } = await sb
     .from("equipos").select("*")
     .eq("empresa_id", empresaInvActual)
     .order("created_at", { ascending: false });
 
-  if (error) { toast("Error al cargar equipos: " + error.message, true); return; }
+  if (error) { toast("Error al cargar equipos: " + error.message, true); $("inventarioResumen").style.display = "none"; return; }
 
   $("equiposEmpty").style.display = (data && data.length) ? "none" : "block";
   $("equiposEmpty").textContent = "Sin equipos para esta empresa todavía.";
+  pintarResumenInventario(data);
 
   // Los ids marcados para combinar que ya no existen en esta carga (se
   // borraron, o se cambio de empresa) no deben seguir contando.
