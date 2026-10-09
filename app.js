@@ -1231,7 +1231,16 @@ function seccionAccionesRemotasHtml(r) {
       <h4>Acciones remotas</h4>
       <p class="sub" style="margin:0 0 10px;">Se ejecutan la próxima vez que el equipo consulte — hasta 15 minutos, no son instantáneas.</p>
       <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">${botones}</div>
-      <div id="equipoDetalleComandosLista"><div class="dash-modal-cargando">Cargando…</div></div>
+
+      <div style="margin-top:4px; padding-top:14px; border-top:1px solid var(--border);">
+        <p class="sub" style="margin:0 0 8px;">Script personalizado (PowerShell) — corre TAL CUAL lo escribas, con permisos de administrador en este equipo.</p>
+        <textarea id="scriptPersonalizadoTexto" rows="5" style="width:100%; font-family:monospace; font-size:0.85rem; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px;" placeholder="Ej: Get-Service -Name wuauserv | Restart-Service"></textarea>
+        <div style="margin-top:8px;">
+          <button class="btn-secondary" style="width:auto; border-color:var(--danger); color:var(--danger);" data-ejecutar-script type="button">Ejecutar script en este equipo</button>
+        </div>
+      </div>
+
+      <div id="equipoDetalleComandosLista" style="margin-top:14px;"><div class="dash-modal-cargando">Cargando…</div></div>
     </div>`;
 }
 
@@ -1304,6 +1313,32 @@ $("equipoDetalleBody").addEventListener("click", async (e) => {
   });
   if (error) { toast("Error al mandar la acción: " + error.message, true); btn.disabled = false; return; }
   toast("Acción en cola — se ejecuta la próxima vez que el equipo consulte.");
+
+  const { data: equipoFresco } = await sb.from("equipos").select("*").eq("id", equipoId).maybeSingle();
+  if (equipoFresco && $("equipoDetalleOverlay").dataset.equipoId === equipoId) abrirDetalleEquipo(equipoFresco);
+});
+
+$("equipoDetalleBody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-ejecutar-script]");
+  if (!btn) return;
+  const equipoId = $("equipoDetalleOverlay").dataset.equipoId;
+  if (!equipoId) return;
+
+  const contenido = $("scriptPersonalizadoTexto").value;
+  if (!contenido || !contenido.trim()) { toast("Escribe el script antes de ejecutarlo.", true); return; }
+  if (!confirm("¿Ejecutar este script en este equipo?\n\nSe va a correr TAL CUAL lo que escribiste arriba, con permisos de administrador, la próxima vez que el equipo consulte (hasta 15 min). No hay deshacer — revísalo bien antes de confirmar.\n\n¿Seguro?")) return;
+
+  btn.disabled = true;
+  const { data: sesionData } = await sb.auth.getSession();
+  const { error } = await sb.from("equipos_comandos").insert({
+    equipo_id: equipoId,
+    accion: "script_personalizado",
+    script_contenido: contenido,
+    creado_por: sesionData?.session?.user?.email || null,
+  });
+  btn.disabled = false;
+  if (error) { toast("Error al mandar el script: " + error.message, true); return; }
+  toast("Script en cola — se ejecuta la próxima vez que el equipo consulte.");
 
   const { data: equipoFresco } = await sb.from("equipos").select("*").eq("id", equipoId).maybeSingle();
   if (equipoFresco && $("equipoDetalleOverlay").dataset.equipoId === equipoId) abrirDetalleEquipo(equipoFresco);

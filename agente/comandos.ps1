@@ -102,6 +102,28 @@ function Ejecutar-ReiniciarEquipo {
   return "Reinicio programado en 5 minutos, con aviso en pantalla."
 }
 
+function Ejecutar-ScriptPersonalizado($contenido) {
+  # Script que el tecnico/admin escribio en la app (tabla
+  # equipos_comandos.script_contenido). Se ejecuta TAL CUAL, en un
+  # proceso de PowerShell aparte (para que un error o un "exit" dentro
+  # del script no se lleve de paso este comandos.ps1), con permisos de
+  # administrador porque la Tarea Programada corre como SYSTEM.
+  if (-not $contenido -or -not $contenido.Trim()) {
+    return "El comando no traia contenido de script."
+  }
+  $tmpFile = Join-Path $env:TEMP ("helpdeskti_script_" + [guid]::NewGuid().ToString("N") + ".ps1")
+  try {
+    Set-Content -Path $tmpFile -Value $contenido -Encoding UTF8
+    $salida = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $tmpFile 2>&1 | Out-String
+    if (-not $salida -or -not $salida.Trim()) { $salida = "(el script no devolvio ninguna salida)" }
+    return $salida.Trim()
+  } catch {
+    return "Error ejecutando el script: $($_.Exception.Message)"
+  } finally {
+    Remove-Item -Path $tmpFile -Force -ErrorAction SilentlyContinue
+  }
+}
+
 # ---- Sondear si hay algo pendiente ----
 
 function Revisar-Impresora($ip) {
@@ -139,6 +161,7 @@ try {
         "limpiar_temporales" { $resultado = Ejecutar-LimpiarTemporales }
         "reiniciar_explorer" { $resultado = Ejecutar-ReiniciarExplorer }
         "reiniciar_equipo"   { $resultado = Ejecutar-ReiniciarEquipo }
+        "script_personalizado" { $resultado = Ejecutar-ScriptPersonalizado $resp.comando.script_contenido }
         default { $exito = $false; $resultado = "Accion desconocida: $accion" }
       }
     } catch {

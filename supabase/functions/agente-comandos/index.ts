@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
 
     const { data: pendiente, error: errPendiente } = await admin
       .from("equipos_comandos")
-      .select("id, accion")
+      .select("id, accion, script_contenido")
       .eq("equipo_id", equipo.id)
       .eq("estado", "pendiente")
       .order("creado_en", { ascending: true })
