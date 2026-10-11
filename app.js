@@ -893,6 +893,8 @@ function estadoAgenteEquipoHtml(r) {
     const clase = pct < 10 ? "pill-bad" : (pct < 20 ? "pill-warn" : "pill");
     html += ` <span class="pill ${clase}">Disco libre ${pct}%</span>`;
   }
+  // Semáforo de seguridad (lo arma seguridad.js con lo que reporta el agente).
+  if (typeof pillSeguridadHtml === "function") html += pillSeguridadHtml(r);
   return html;
 }
 
@@ -1202,7 +1204,9 @@ function construirDetalleEquipoHtml(r) {
       ${r.comentarios ? `<div class="dato" style="margin-top:10px;"><span class="et">Comentarios</span>${escapeHtml(r.comentarios)}</div>` : ""}
     </div>`;
 
-  return seccionConexion + seccionIdentificacion + seccionHardware + seccionSistema + seccionAcceso + seccionRenting + seccionRegistro;
+  const seccionSeguridad = typeof seccionSeguridadHtml === "function" ? seccionSeguridadHtml(r) : "";
+
+  return seccionConexion + seccionSeguridad + seccionIdentificacion + seccionHardware + seccionSistema + seccionAcceso + seccionRenting + seccionRegistro;
 }
 
 const ACCIONES_REMOTAS = {
@@ -1253,7 +1257,7 @@ async function abrirDetalleEquipo(r) {
 
   const [historialResp, comandosResp] = await Promise.all([
     sb.from("equipos_historial").select("creado_en, disco_libre_pct").eq("equipo_id", r.id).order("creado_en", { ascending: false }).limit(15),
-    sb.from("equipos_comandos").select("accion, estado, creado_en, ejecutado_en, resultado").eq("equipo_id", r.id).order("creado_en", { ascending: false }).limit(5),
+    sb.from("equipos_comandos").select("accion, estado, creado_en, ejecutado_en, resultado, creado_por").eq("equipo_id", r.id).order("creado_en", { ascending: false }).limit(5),
   ]);
 
   // Si mientras se esperaba la respuesta ya se cerró este modal o se
@@ -1275,10 +1279,12 @@ async function abrirDetalleEquipo(r) {
       ? `<ul class="equipo-detalle-historial">${comandos.map((c) => {
           const estadoTxt = c.estado === "pendiente" ? "pendiente" : (c.estado === "ejecutado" ? "listo" : "error");
           const clase = c.estado === "pendiente" ? "pill-warn" : (c.estado === "ejecutado" ? "pill-ok" : "pill-bad");
-          return `<li><span class="pill ${clase}">${estadoTxt}</span> ${escapeHtml(ACCIONES_REMOTAS[c.accion] || c.accion)} — ${fmtFecha(c.creado_en)}${c.resultado ? ` — ${escapeHtml(c.resultado)}` : ""}</li>`;
+          return `<li><span class="pill ${clase}">${estadoTxt}</span> ${escapeHtml(ACCIONES_REMOTAS[c.accion] || (typeof ACCIONES_SEGURIDAD !== "undefined" && ACCIONES_SEGURIDAD[c.accion]) || c.accion)}${c.creado_por === "Respuesta automática" ? " (automática)" : ""} — ${fmtFecha(c.creado_en)}${c.resultado ? ` — ${escapeHtml(c.resultado)}` : ""}</li>`;
         }).join("")}</ul>`
       : '<p class="empty-state">Sin acciones mandadas todavía.</p>';
   }
+
+  if (typeof cargarAmenazasEquipo === "function") cargarAmenazasEquipo(r.id);
 }
 
 function cerrarDetalleEquipo() {
