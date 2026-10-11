@@ -25,6 +25,15 @@
 // válido y esté activo (se valida abajo contra equipos_tokens), igual
 // que en agente-inventario.
 //
+// Respuesta automática de seguridad: en "consultar" se le dice al
+// agente si la empresa la tiene prendida (empresas.seguridad_auto). Si
+// es así, el agente puede por su cuenta volver a prender la protección
+// en tiempo real, actualizar firmas viejas o mandar a eliminar una
+// amenaza sin resolver, y avisa lo que hizo con modo
+// "accion_automatica" -- queda anotado en equipos_comandos como
+// "Respuesta automática" para que se vea en la app igual que una
+// acción mandada a mano.
+//
 // La app (con sesión de usuario, sb.from("equipos_comandos").insert)
 // es quien crea las filas "pendiente" directamente — esta función
 // es solo lo que usa el agente para consultarlas y marcarlas.
@@ -96,6 +105,28 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (modo === "accion_automatica") {
+      const ACCIONES_AUTO = ["activar_proteccion", "actualizar_firmas", "eliminar_amenazas"];
+      const accion = String(body.accion || "");
+      if (!ACCIONES_AUTO.includes(accion)) return json({ error: "Acción no permitida." }, 400);
+
+      const equipoAuto = await buscarEquipo(admin, empresaId, body);
+      if (!equipoAuto) return json({ ok: true, anotado: false });
+
+      const ahoraAuto = new Date().toISOString();
+      const { error: errAuto } = await admin.from("equipos_comandos").insert({
+        equipo_id: equipoAuto.id,
+        accion,
+        estado: body.exito === false ? "error" : "ejecutado",
+        creado_por: "Respuesta automática",
+        creado_en: ahoraAuto,
+        ejecutado_en: ahoraAuto,
+        resultado: body.resultado ? String(body.resultado).slice(0, 2000) : null,
+      });
+      if (errAuto) return json({ error: errAuto.message }, 400);
+      return json({ ok: true, anotado: true });
+    }
+
     if (modo === "estado_red") {
       // El agente reporta lo que vio en SU red local: impresoras (ping)
       // y routers sin IP pública (conexión al puerto de la API). Se
@@ -133,13 +164,16 @@ Deno.serve(async (req) => {
     // (si hay alguna, para el equipo que reporta), siempre devuelve las
     // impresoras y los routers "via_agente" de esta empresa, para que
     // el agente los revise por su red local en esta misma pasada.
-    const [{ data: impresoras }, { data: mikrotikAgente }] = await Promise.all([
+    const [{ data: impresoras }, { data: mikrotikAgente }, { data: empresaFila }] = await Promise.all([
       admin.from("impresoras").select("id, ip_local").eq("empresa_id", empresaId),
       admin.from("mikrotik_routers").select("id, host, puerto").eq("empresa_id", empresaId).eq("via_agente", true),
+      admin.from("empresas").select("seguridad_auto").eq("id", empresaId).maybeSingle(),
     ]);
 
     const respuestaBase = {
       ok: true,
+      // deno-lint-ignore no-explicit-any
+      respuesta_automatica: (empresaFila as any)?.seguridad_auto === true,
       impresoras: impresoras || [],
       mikrotik: mikrotikAgente || [],
     };
@@ -152,25 +186,7 @@ Deno.serve(async (req) => {
       return json({ ...respuestaBase, comando: null });
     }
 
-    let equipo: { id: string } | null = null;
-    if (serial) {
-      const { data } = await admin
-        .from("equipos")
-        .select("id")
-        .eq("empresa_id", empresaId)
-        .eq("serial", serial)
-        .maybeSingle();
-      equipo = data;
-    }
-    if (!equipo && nombreRed) {
-      const { data } = await admin
-        .from("equipos")
-        .select("id")
-        .eq("empresa_id", empresaId)
-        .eq("nombre_red", nombreRed)
-        .maybeSingle();
-      equipo = data;
-    }
+    const equipo = await buscarEquipo(admin, empresaId, body);
 
     if (!equipo) return json({ ...respuestaBase, comando: null });
 
@@ -190,6 +206,23 @@ Deno.serve(async (req) => {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }
 });
+
+// Encuentra el equipo que está hablando: primero por serial y, si no
+// tiene, por nombre de red -- siempre dentro de la empresa del token.
+// deno-lint-ignore no-explicit-any
+async function buscarEquipo(admin: any, empresaId: string, body: any): Promise<{ id: string } | null> {
+  const serial = body.serial ? String(body.serial).trim() : "";
+  const nombreRed = body.nombre_red ? String(body.nombre_red).trim() : "";
+  if (serial) {
+    const { data } = await admin.from("equipos").select("id").eq("empresa_id", empresaId).eq("serial", serial).maybeSingle();
+    if (data) return data;
+  }
+  if (nombreRed) {
+    const { data } = await admin.from("equipos").select("id").eq("empresa_id", empresaId).eq("nombre_red", nombreRed).maybeSingle();
+    if (data) return data;
+  }
+  return null;
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
