@@ -25,7 +25,9 @@
 #         y cada 6 horas.
 #       - HelpdeskTI-Comandos: corre comandos.ps1 cada 15 minutos, por
 #         si hay alguna accion remota pendiente (liberar memoria,
-#         limpiar temporales, reiniciar explorer, reiniciar el equipo).
+#         limpiar temporales, reiniciar explorer, reiniciar el equipo,
+#         analisis de antivirus, actualizar firmas) y si cambio algo
+#         en la proteccion del equipo.
 #     Asi queda "instalado" de forma permanente, sin que haya que
 #     volver a correr nada.
 #  5. Corre reportar.ps1 una vez de inmediato, para que el equipo
@@ -99,4 +101,4 @@ if (Test-Path $logPath) {
   Get-Content -Path $logPath -Tail 1
 }
 
-Write-Host "Listo. Este equipo va a seguir reportandose solo cada 6 horas (y en cada inicio), y va a revisar acciones remotas pendientes cada 15 minutos." -ForegroundColor Green
+Write-Host "Listo. Este equipo va a seguir reportando su inventario y su estado de seguridad cada 6 horas (y en cada inicio), y cada 15 minutos revisa acciones remotas pendientes y cambios en la proteccion." -ForegroundColor Green
