@@ -709,6 +709,12 @@ tbody tr:last-child td { border-bottom: none; }
 
       <p class="empty-state" id="dashMensaje" style="padding:14px 0; text-align:left;">Da clic en "Actualizar estado" para consultar todos los routers.</p>
       <div class="dash-grid" id="dashGrid"></div>
+
+      <div class="card" id="dashEquiposStaleWrap" style="display:none; margin-top:18px;">
+        <h3 style="margin:0 0 4px;">Equipos sin reportarse hace más de 5 días</h3>
+        <p class="sub" style="margin:0 0 12px;">Puede ser que se haya formateado, se haya dado de baja o ya no esté en la empresa. Dale clic para revisarlo y, si ya no aplica, márcalo como "Dado de baja" para que deje de salir aquí.</p>
+        <div id="dashEquiposStaleLista"></div>
+      </div>
     </section>
 
     <!-- ---------- Vista: Empresas ---------- -->

@@ -204,6 +204,7 @@ try {
 aplicarAutoRefreshDash();
 
 async function cargarDashboard() {
+  cargarEquiposStale(); // aparte, no bloquea el resto si falla
   $("btnActualizarDashboard").disabled = true;
   $("btnActualizarDashboard").textContent = "Actualizando…";
   $("dashMensaje").style.display = "none";
@@ -356,6 +357,47 @@ function pintarResumenDashboard(items) {
     <div class="dash-resumen-item dr-muted"><div class="dr-icon">○</div><span class="dr-num">${sinRouter}</span><span class="dr-label">Sin router</span></div>`;
 
   return { html, ok, advertencia, alerta, sinRouter };
+}
+
+// Equipos (de cualquier empresa) que tienen el agente instalado pero
+// llevan mas de 5 dias sin reportarse — suele ser porque se formatearon,
+// se dieron de baja o ya no estan en la empresa. Se muestra aparte del
+// resto del Dashboard porque sale de la tabla "equipos", no de los
+// routers. Los que ya se marcaron "inactivo" (dado de baja) no vuelven
+// a salir aqui.
+async function cargarEquiposStale() {
+  const wrap = $("dashEquiposStaleWrap");
+  const lista = $("dashEquiposStaleLista");
+  if (!wrap || !lista) return;
+
+  const limite = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await sb
+    .from("equipos")
+    .select("id, nombre_red, serial, tipo_equipo, actualizado_en, empresas(nombre)")
+    .eq("origen", "agente")
+    .eq("inactivo", false)
+    .lt("actualizado_en", limite)
+    .order("actualizado_en", { ascending: true });
+
+  if (error || !data || data.length === 0) { wrap.style.display = "none"; lista.innerHTML = ""; return; }
+
+  wrap.style.display = "block";
+  lista.innerHTML = data.map((r) => `
+    <div class="dash-stale-item" data-equipo-id="${r.id}" style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer;">
+      <div>
+        <strong>${escapeHtml(r.nombre_red || r.serial || "Equipo")}</strong>
+        <span class="sub"> — ${escapeHtml(r.empresas?.nombre || "")}</span>
+      </div>
+      <span class="pill pill-bad">Sin reportar ${formatearHaceTiempo(r.actualizado_en)}</span>
+    </div>`).join("");
+
+  lista.querySelectorAll("[data-equipo-id]").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const { data: equipoFresco, error: errFresco } = await sb.from("equipos").select("*").eq("id", el.dataset.equipoId).maybeSingle();
+      if (errFresco || !equipoFresco) { toast("No se pudo abrir el equipo: " + (errFresco?.message || "no encontrado"), true); return; }
+      abrirDetalleEquipo(equipoFresco);
+    });
+  });
 }
 
 // Manda la orden de reinicio a un router MikroTik (Edge Function
@@ -877,6 +919,7 @@ $("btnCancelarEdicionEquipo").addEventListener("click", cancelarEdicionEquipo);
 // se marcan como "Manual".
 function estadoAgenteEquipoHtml(r) {
   if (r.origen !== "agente") return `<span class="pill">Manual</span>`;
+  if (r.inactivo) return `<span class="pill">Dado de baja</span>`;
 
   const minutos = r.actualizado_en ? (Date.now() - new Date(r.actualizado_en).getTime()) / 60000 : Infinity;
   let html;
@@ -916,6 +959,7 @@ autoRefreshInvTimer = setInterval(() => {
 // la tabla de abajo siempre cuenten la misma historia.
 function estadoEquipoInventario(r) {
   if (r.origen !== "agente") return "manual";
+  if (r.inactivo) return "inactivo";
   const minutos = r.actualizado_en ? (Date.now() - new Date(r.actualizado_en).getTime()) / 60000 : Infinity;
   const disco = parseFloat(r.disco_libre_pct);
   const discoValido = !Number.isNaN(disco);
@@ -931,6 +975,7 @@ function pintarResumenInventario(data) {
   let ok = 0, advertencia = 0, critico = 0, manual = 0;
   data.forEach((r) => {
     const estado = estadoEquipoInventario(r);
+    if (estado === "inactivo") return; // dado de baja: no cuenta en el resumen
     if (estado === "critico") critico++;
     else if (estado === "advertencia") advertencia++;
     else if (estado === "manual") manual++;
@@ -1202,7 +1247,22 @@ function construirDetalleEquipoHtml(r) {
       ${r.comentarios ? `<div class="dato" style="margin-top:10px;"><span class="et">Comentarios</span>${escapeHtml(r.comentarios)}</div>` : ""}
     </div>`;
 
-  return seccionConexion + seccionIdentificacion + seccionHardware + seccionSistema + seccionAcceso + seccionRenting + seccionRegistro;
+  const seccionBaja = r.inactivo ? `
+    <div class="equipo-detalle-seccion">
+      <h4>Dado de baja</h4>
+      <p class="sub" style="margin:0 0 8px;">Marcado como dado de baja${r.inactivo_en ? " el " + fmtFecha(r.inactivo_en) : ""}.${r.inactivo_motivo ? " Motivo: " + escapeHtml(r.inactivo_motivo) : ""}</p>
+      <button class="btn-secondary" style="width:auto;" data-reactivar-equipo type="button">Reactivar (ya no está dado de baja)</button>
+    </div>` : `
+    <div class="equipo-detalle-seccion">
+      <h4>Dado de baja</h4>
+      <p class="sub" style="margin:0 0 8px;">Si este equipo se formateó, se vendió o ya no es de la empresa, márcalo aquí para que deje de salir en las alertas de "sin reportarse".</p>
+      <textarea id="equipoDetalleBajaMotivo" rows="2" style="width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px;" placeholder="Motivo (opcional): se formateó, se vendió, cambio de equipo, etc."></textarea>
+      <div style="margin-top:8px;">
+        <button class="btn-secondary" style="width:auto;" data-marcar-baja type="button">Marcar como dado de baja</button>
+      </div>
+    </div>`;
+
+  return seccionConexion + seccionIdentificacion + seccionHardware + seccionSistema + seccionAcceso + seccionRenting + seccionRegistro + seccionBaja;
 }
 
 const ACCIONES_REMOTAS = {
@@ -1316,6 +1376,52 @@ $("equipoDetalleBody").addEventListener("click", async (e) => {
 
   const { data: equipoFresco } = await sb.from("equipos").select("*").eq("id", equipoId).maybeSingle();
   if (equipoFresco && $("equipoDetalleOverlay").dataset.equipoId === equipoId) abrirDetalleEquipo(equipoFresco);
+});
+
+$("equipoDetalleBody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-marcar-baja]");
+  if (!btn) return;
+  const equipoId = $("equipoDetalleOverlay").dataset.equipoId;
+  if (!equipoId) return;
+  if (!confirm("¿Marcar este equipo como dado de baja?\n\nVa a dejar de salir en la alerta de \"sin reportarse\" del Dashboard y en el resumen de Inventario. Lo puedes reactivar después si hace falta.")) return;
+
+  const motivo = ($("equipoDetalleBajaMotivo")?.value || "").trim();
+  btn.disabled = true;
+  const { error } = await sb.from("equipos").update({
+    inactivo: true,
+    inactivo_motivo: motivo || null,
+    inactivo_en: new Date().toISOString(),
+  }).eq("id", equipoId);
+  btn.disabled = false;
+  if (error) { toast("Error al marcar como dado de baja: " + error.message, true); return; }
+  toast("Equipo marcado como dado de baja.");
+
+  const { data: equipoFresco } = await sb.from("equipos").select("*").eq("id", equipoId).maybeSingle();
+  if (equipoFresco && $("equipoDetalleOverlay").dataset.equipoId === equipoId) abrirDetalleEquipo(equipoFresco);
+  cargarEquiposStale();
+  if (vistaInventarioActiva() && empresaInvActual) cargarEquipos();
+});
+
+$("equipoDetalleBody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-reactivar-equipo]");
+  if (!btn) return;
+  const equipoId = $("equipoDetalleOverlay").dataset.equipoId;
+  if (!equipoId) return;
+
+  btn.disabled = true;
+  const { error } = await sb.from("equipos").update({
+    inactivo: false,
+    inactivo_motivo: null,
+    inactivo_en: null,
+  }).eq("id", equipoId);
+  btn.disabled = false;
+  if (error) { toast("Error al reactivar: " + error.message, true); return; }
+  toast("Equipo reactivado.");
+
+  const { data: equipoFresco } = await sb.from("equipos").select("*").eq("id", equipoId).maybeSingle();
+  if (equipoFresco && $("equipoDetalleOverlay").dataset.equipoId === equipoId) abrirDetalleEquipo(equipoFresco);
+  cargarEquiposStale();
+  if (vistaInventarioActiva() && empresaInvActual) cargarEquipos();
 });
 
 $("equipoDetalleBody").addEventListener("click", async (e) => {
