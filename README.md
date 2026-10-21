@@ -137,3 +137,39 @@ Edita `index.html`, `app.js` o `style.css` y vuelve a subir los archivos
 actualizados al mismo repositorio (reemplazando los anteriores) — GitHub
 Pages se actualiza solo en 1-2 minutos.
 
+
+## Seguridad, rendimiento y ficha para el cliente
+
+El agente que se instala en los equipos (carpeta `agente/`) reporta, además
+del inventario, el estado de protección y lo que afecta el rendimiento de
+cada equipo. Con eso la app tiene:
+
+- **Vista Seguridad**: semáforo de todos los equipos de todas las empresas
+  (protegido / con advertencia / en riesgo / sin vigilancia), los equipos
+  que necesitan atención, las amenazas detectadas y lo que el agente
+  corrigió solo.
+- **Acciones de antivirus** desde el detalle de un equipo: análisis rápido
+  o completo, actualizar firmas, activar la protección, eliminar amenazas.
+  Aplican a Microsoft Defender; si el equipo usa otro antivirus (ESET,
+  etc.) la app muestra su estado pero no lo controla.
+- **Respuesta automática** (se prende o apaga por empresa): cada 15 minutos
+  el agente revisa que la protección siga en pie y, si la apagaron, las
+  firmas tienen más de 3 días o quedó una amenaza sin resolver, lo corrige
+  y lo deja anotado.
+- **Ficha del equipo** e **Informe para el cliente**: hojas claras, para
+  mostrar en pantalla o imprimir/guardar en PDF, con el esquema del equipo
+  (procesador, ranuras de memoria, discos), lo que conviene mejorar y su
+  estado de protección.
+
+### Activarlo (una sola vez)
+
+1. En Supabase → **SQL Editor**, correr `supabase/seguridad.sql`.
+2. Publicar de nuevo las Edge Functions `agente-inventario` y
+   `agente-comandos` (carpeta `supabase/functions/`), las dos con
+   "Verify JWT" desactivado, igual que antes.
+3. Subir los archivos al repositorio (GitHub Pages los publica solo).
+4. En la vista **Seguridad**, botón **Actualizar agentes** de cada empresa:
+   los equipos que ya tenían el agente descargan la versión nueva sin
+   tener que ir hasta ellos. Los equipos nuevos ya la instalan directo.
+
+El orden importa: primero el SQL, después las funciones.

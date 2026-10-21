@@ -605,6 +605,116 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 640px) {
   .dash-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* -------- Seguridad -------- */
+.seg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 4px; }
+.seg-grid .card { margin-bottom: 0; }
+.seg-empresa-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.seg-conteos { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: 0.84rem; color: var(--text-dim); }
+.seg-conteos strong { color: var(--text); font-family: var(--font-mono); }
+.seg-auto { display: flex; gap: 10px; align-items: flex-start; font-size: 0.84rem; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text); font-family: var(--font-body); margin: 0; }
+.seg-auto .sub { font-weight: 400; }
+#tablaSegAtencion .actions-cell { white-space: nowrap; }
+.seg-auto input { width: auto; margin-top: 3px; flex-shrink: 0; }
+.seg-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.seg-motivos { margin: 0 0 12px; padding-left: 18px; font-size: 0.85rem; color: var(--text); }
+.seg-motivos li { margin-bottom: 3px; }
+@media (max-width: 900px) { .seg-dos { grid-template-columns: 1fr; } }
+
+/* -------- Ficha para el cliente (hoja clara, imprimible) -------- */
+.ficha-overlay { display: none; position: fixed; inset: 0; z-index: 900; overflow-y: auto; background: #dfe3ea; }
+.ficha-overlay.abierto { display: block; }
+body.ficha-abierta { overflow: hidden; }
+.ficha-barra {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 20px; background: var(--bg-soft); border-bottom: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.82rem;
+}
+.ficha-barra div { display: flex; gap: 8px; }
+.ficha {
+  --f-tinta: #16202e; --f-tenue: #5c6878; --f-linea: #d9dee6; --f-fondo: #f4f6f9;
+  --f-acento: #1f5fbf; --f-bien: #17794a; --f-aviso: #9a6400; --f-malo: #b3261e;
+  max-width: 980px; margin: 24px auto 48px; padding: 40px 44px;
+  background: #fff; color: var(--f-tinta); border-radius: 6px;
+  box-shadow: 0 10px 40px rgba(20, 30, 50, 0.18);
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+}
+.ficha h1 { font-family: var(--font-display); font-size: 1.75rem; margin: 2px 0 2px; color: var(--f-tinta); line-height: 1.2; overflow-wrap: anywhere; }
+.ficha h2 { font-family: var(--font-display); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--f-tenue); margin: 30px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--f-linea); }
+.ficha p { margin: 0; }
+.ficha section { break-inside: avoid; }
+.f-tenue { color: var(--f-tenue); font-size: 0.88em; }
+.f-encabezado { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; padding-bottom: 18px; border-bottom: 3px solid var(--f-tinta); }
+.f-encabezado p { color: var(--f-tenue); }
+.f-marca { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--f-acento); font-weight: 600; }
+.f-encabezado-der { text-align: right; display: flex; flex-direction: column; flex-shrink: 0; }
+.f-encabezado-der span { color: var(--f-tenue); font-size: 0.86rem; }
+.f-resumen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+.f-resumen-4 { grid-template-columns: repeat(4, 1fr); }
+.f-resumen-item { background: var(--f-fondo); border: 1px solid var(--f-linea); border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.f-resumen-et { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--f-tenue); font-weight: 600; }
+.f-numero { font-family: var(--font-mono); font-size: 1.7rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.f-estado { font-weight: 600; font-size: 0.92rem; white-space: nowrap; }
+.f-estado.f-bien { color: var(--f-bien); } .f-estado.f-aviso { color: var(--f-aviso); }
+.f-estado.f-malo { color: var(--f-malo); } .f-estado.f-nada { color: var(--f-tenue); }
+.f-nota { margin-top: 14px !important; padding: 10px 14px; background: #fff7e6; border-left: 3px solid var(--f-aviso); font-size: 0.88rem; }
+
+.f-esquema { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.f-pieza { border: 1.5px solid var(--f-tinta); border-radius: 6px; padding: 14px 16px 16px; position: relative; background: #fff; min-width: 0; }
+.f-pieza-titulo { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--f-acento); font-weight: 600; margin-bottom: 8px; }
+.f-pieza-nombre { font-weight: 600; margin-bottom: 4px !important; overflow-wrap: anywhere; }
+.f-chip { width: 74px; height: 74px; margin: 2px 0 10px; border: 1.5px solid var(--f-tinta); border-radius: 4px; padding: 7px;
+  background: repeating-linear-gradient(90deg, var(--f-tinta) 0 2px, transparent 2px 7px) top/100% 4px no-repeat,
+              repeating-linear-gradient(90deg, var(--f-tinta) 0 2px, transparent 2px 7px) bottom/100% 4px no-repeat; }
+.f-chip-nucleo { width: 100%; height: 100%; background: var(--f-fondo); border: 1px solid var(--f-linea); display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 700; font-size: 1.25rem; line-height: 1; }
+.f-chip-nucleo span { font-size: 0.55rem; font-weight: 500; color: var(--f-tenue); margin-top: 3px; }
+.f-ranuras { display: flex; gap: 6px; margin: 8px 0 6px; }
+.f-ranura { flex: 1; min-width: 0; height: 62px; border: 1.5px dashed var(--f-linea); border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--f-tenue); text-align: center; }
+.f-ranura-llena { border: 1.5px solid var(--f-tinta); background: var(--f-fondo); color: var(--f-tinta); }
+.f-ranura-llena strong { font-family: var(--font-mono); font-size: 0.86rem; }
+.f-ranura-llena span { font-size: 0.62rem; color: var(--f-tenue); }
+.f-disco { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--f-linea); overflow-wrap: anywhere; }
+.f-barra-fila { display: flex; justify-content: space-between; gap: 10px; font-size: 0.82rem; margin-top: 10px; }
+.f-barra-fila span { overflow-wrap: anywhere; }
+.f-barra-fila strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.f-barra { height: 7px; background: var(--f-fondo); border: 1px solid var(--f-linea); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.f-barra-llena { height: 100%; }
+.f-barra-llena.f-bien { background: var(--f-bien); } .f-barra-llena.f-aviso { background: var(--f-aviso); }
+.f-barra-llena.f-malo { background: var(--f-malo); } .f-barra-llena.f-neutro { background: var(--f-acento); }
+.f-lista { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 8px 0 0; font-size: 0.84rem; }
+.f-lista dt { color: var(--f-tenue); } .f-lista dd { margin: 0; text-align: right; font-weight: 500; overflow-wrap: anywhere; }
+.f-recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.f-recs li { display: grid; grid-template-columns: 200px 1fr; gap: 14px; padding: 10px 14px; background: var(--f-fondo); border-left: 4px solid var(--f-aviso); border-radius: 0 4px 4px 0; break-inside: avoid; }
+.f-recs li.f-rec-alta { border-left-color: var(--f-malo); }
+.f-ok-linea { color: var(--f-bien); font-weight: 600; }
+.f-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.f-amenazas, .f-hechos { margin: 0; padding: 0; list-style: none; font-size: 0.88rem; }
+.f-amenazas li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--f-linea); }
+.f-amenazas li span:nth-child(2) { flex: 1 1 180px; overflow-wrap: anywhere; }
+.f-hechos li { padding: 3px 0; } .f-hechos { margin-bottom: 10px; }
+.f-tabla-wrap { overflow-x: auto; }
+.f-tabla { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.f-tabla th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--f-tenue); padding: 6px 10px 6px 0; border-bottom: 1.5px solid var(--f-tinta); background: none; }
+.f-tabla td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--f-linea); vertical-align: top; color: var(--f-tinta); background: none !important; white-space: normal; overflow-wrap: anywhere; }
+.f-tabla tr { break-inside: avoid; }
+.f-pie { margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--f-linea); color: var(--f-tenue); font-size: 0.78rem; }
+@media (max-width: 820px) {
+  .ficha { margin: 0; padding: 24px 16px; border-radius: 0; }
+  .f-esquema, .f-dos { grid-template-columns: 1fr; }
+  .f-resumen, .f-resumen-4 { grid-template-columns: 1fr 1fr; }
+  .f-recs li { grid-template-columns: 1fr; gap: 2px; }
+  .f-encabezado { flex-direction: column; align-items: flex-start; }
+  .f-encabezado-der { text-align: left; }
+}
+@media print {
+  body.ficha-abierta > *:not(.ficha-overlay) { display: none !important; }
+  body.ficha-abierta { overflow: visible; background: #fff; }
+  .ficha-overlay { position: static; background: #fff; overflow: visible; }
+  .ficha-barra { display: none; }
+  .ficha { box-shadow: none; margin: 0; padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 14mm; }
+}
 </style>
 </head>
 <body>
@@ -655,6 +765,11 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="nav-btn" data-view="inventario">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <span>Inventario</span>
+      </button>
+      <button class="nav-btn" data-view="seguridad" id="navSeguridad">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.6-2.9 8.4-7 10-4.1-1.6-7-5.4-7-10V6l7-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Seguridad</span>
+        <span class="nav-alert-dot" id="navSeguridadAlerta" style="display:none;" title="Hay equipos en riesgo"></span>
       </button>
       <button class="nav-btn" data-view="credenciales" id="navCredenciales">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg>
@@ -803,6 +918,29 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
 
       <div class="card">
+        <h3>Mantenimiento en todos los equipos</h3>
+        <p class="sub" style="margin-top:-6px;">Manda la misma acción a todos los equipos de esta empresa que tienen el agente. Cada uno la ejecuta la próxima vez que consulte (hasta 15 minutos, si está encendido).</p>
+        <div class="toolbar" style="margin-bottom:0;">
+          <div class="field">
+            <label for="mantAccion">Acción</label>
+            <select id="mantAccion">
+              <option value="limpiar_temporales">Limpiar temporales y papelera</option>
+              <option value="liberar_memoria">Liberar memoria</option>
+              <option value="actualizar_firmas">Actualizar firmas del antivirus</option>
+              <option value="analisis_rapido">Análisis rápido de antivirus</option>
+              <option value="reiniciar_equipo">Reiniciar equipos (con aviso de 5 minutos)</option>
+              <option value="script_personalizado">Script personalizado (PowerShell)…</option>
+            </select>
+          </div>
+          <button class="btn-secondary" id="btnMantEjecutar" type="button">Ejecutar en todos</button>
+        </div>
+        <div id="mantScriptWrap" style="display:none; margin-top:12px;">
+          <label for="mantScript">Script — corre TAL CUAL, con permisos de administrador, en cada equipo</label>
+          <textarea id="mantScript" rows="5" style="font-family:monospace; font-size:12.5px;" placeholder="Ej: Get-Service -Name Spooler | Restart-Service"></textarea>
+        </div>
+      </div>
+
+      <div class="card">
         <h3 id="equipoFormTitulo">Registrar equipo</h3>
         <div class="form-grid">
           <div>
@@ -875,6 +1013,46 @@ tbody tr:last-child td { border-bottom: none; }
     </section>
 
     <!-- ---------- Vista: Contraseñas ---------- -->
+    <section class="view" id="view-seguridad">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.6-2.9 8.4-7 10-4.1-1.6-7-5.4-7-10V6l7-3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div>
+          <h1>Seguridad</h1>
+          <p class="sub">La protección de todos los equipos con agente, de todas las empresas — antivirus, firmas, firewall y amenazas.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn-primary" style="width:auto; margin-top:0;" id="btnActualizarSeguridad">Actualizar</button>
+      </div>
+
+      <div class="dash-resumen" id="segResumen" style="display:none;"></div>
+
+      <div class="card">
+        <h3>Equipos que necesitan atención</h3>
+        <p class="empty-state" id="segAtencionEmpty" style="padding:18px 0;">Ningún equipo vigilado necesita atención ahora.</p>
+        <div class="table-wrap" id="segAtencionWrap" style="display:none;">
+          <table>
+            <thead><tr><th>Estado</th><th>Empresa</th><th>Equipo</th><th>Responsable</th><th>Qué pasa</th><th></th></tr></thead>
+            <tbody id="tablaSegAtencion"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="seg-grid" id="segEmpresas"></div>
+
+      <div class="seg-dos">
+        <div class="card">
+          <h3>Amenazas detectadas (30 días)</h3>
+          <div id="segAmenazas"></div>
+        </div>
+        <div class="card">
+          <h3>Lo que el agente corrigió solo</h3>
+          <div id="segAutomaticas"></div>
+        </div>
+      </div>
+    </section>
+
     <section class="view" id="view-credenciales">
       <div class="view-head">
         <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6"/></svg></div>
@@ -1131,11 +1309,23 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<div class="ficha-overlay" id="fichaOverlay">
+  <div class="ficha-barra">
+    <span>Vista para el cliente</span>
+    <div>
+      <button class="btn-secondary" style="width:auto;" id="btnImprimirFicha" type="button">Imprimir o guardar PDF</button>
+      <button class="btn-secondary" style="width:auto;" id="btnCerrarFicha" type="button">Cerrar</button>
+    </div>
+  </div>
+  <div class="ficha" id="fichaHoja"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="seguridad.js"></script>
 </body>
 </html>
