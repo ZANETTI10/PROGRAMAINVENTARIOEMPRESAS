@@ -1231,6 +1231,7 @@ body.ficha-abierta { overflow: hidden; }
           </div>
           <div><label for="repHoraInicio">Hora inicio</label><input type="time" id="repHoraInicio" /></div>
           <div><label for="repHoraFin">Hora fin</label><input type="time" id="repHoraFin" /></div>
+          <div><label for="repUsuarioArea">Usuario / Área</label><input id="repUsuarioArea" placeholder="Nombre de quien usa el equipo o área" /></div>
           <div class="full"><label for="repDescripcion">Descripción</label><textarea id="repDescripcion" rows="3" placeholder="Qué se hizo / qué se encontró"></textarea></div>
           <div class="full"><label for="repSolucion">Solución</label><textarea id="repSolucion" rows="3" placeholder="Cómo quedó resuelto (o qué queda pendiente)"></textarea></div>
         </div>
@@ -1245,7 +1246,7 @@ body.ficha-abierta { overflow: hidden; }
         <h3>Reportes registrados</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th></th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Usuario/Área</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th></th></tr></thead>
             <tbody id="tablaReportes"></tbody>
           </table>
         </div>

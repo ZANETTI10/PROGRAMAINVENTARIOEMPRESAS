@@ -1707,6 +1707,7 @@ $("btnGuardarReporte").addEventListener("click", async () => {
     tipo: $("repTipo").value,
     hora_inicio: horaInicio,
     hora_fin: $("repHoraFin").value || null,
+    usuario_area: $("repUsuarioArea").value.trim() || null,
     descripcion,
     solucion: $("repSolucion").value.trim() || null,
   };
@@ -1731,6 +1732,7 @@ function cancelarEdicionReporte() {
   $("repTipo").value = "presencial";
   $("repHoraInicio").value = "";
   $("repHoraFin").value = "";
+  $("repUsuarioArea").value = "";
   $("repDescripcion").value = "";
   $("repSolucion").value = "";
   $("repFormTitulo").textContent = "Nuevo reporte";
@@ -1763,6 +1765,7 @@ async function cargarReportes() {
       <td>${fmtFechaCorta(r.fecha)}</td>
       <td><span class="pill">${r.tipo === "remoto" ? "Remoto" : "Presencial"}</span></td>
       <td>${horario}</td>
+      <td>${escapeHtml(r.usuario_area || "—")}</td>
       <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
       <td>${escapeHtml(r.descripcion)}</td>
       <td>${escapeHtml(r.solucion || "—")}</td>
@@ -1782,6 +1785,7 @@ async function cargarReportes() {
       $("repTipo").value = r.tipo || "presencial";
       $("repHoraInicio").value = r.hora_inicio ? r.hora_inicio.slice(0, 5) : "";
       $("repHoraFin").value = r.hora_fin ? r.hora_fin.slice(0, 5) : "";
+      $("repUsuarioArea").value = r.usuario_area || "";
       $("repDescripcion").value = r.descripcion || "";
       $("repSolucion").value = r.solucion || "";
       $("repFormTitulo").textContent = "Editar reporte";
@@ -1812,7 +1816,7 @@ $("btnExportarReportes").addEventListener("click", async () => {
   const filas = (data || []).map((r) => ({
     Fecha: r.fecha, Tipo: r.tipo === "remoto" ? "Remoto" : "Presencial",
     "Hora inicio": r.hora_inicio, "Hora fin": r.hora_fin,
-    Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
+    "Usuario/Área": r.usuario_area, Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
   }));
   exportarExcel(filas, `Reportes - ${nombreEmpresa}.xlsx`, "Reportes");
 });
