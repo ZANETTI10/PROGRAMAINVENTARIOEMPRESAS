@@ -73,6 +73,7 @@ async function entrarApp(session) {
   await cargarPersonal();
   if (perfil.rol === "admin") await cargarUsuarios();
   cargarDashboard();
+  cancelarEdicionReporte();
 }
 
 function usuarioAEmail(valor) {
@@ -133,6 +134,7 @@ const VISTAS_CON_EMPRESA = {
   inventario: { select: "invEmpresaSelect", actual: () => empresaInvActual },
   credenciales: { select: "credEmpresaSelect", actual: () => empresaCredActual },
   monitoreo: { select: "monEmpresaSelect", actual: () => empresaMonitoreoActual },
+  reportes: { select: "repEmpresaSelect", actual: () => empresaRepActual },
 };
 
 // Deja la misma empresa marcada en los otros dos selects (sin disparar su
@@ -780,6 +782,7 @@ async function cargarEmpresas() {
   $("invEmpresaSelect").innerHTML = opciones;
   $("credEmpresaSelect").innerHTML = opciones;
   $("monEmpresaSelect").innerHTML = opciones;
+  $("repEmpresaSelect").innerHTML = opciones;
 
   $("empresaFormCard").style.display = perfil.rol === "admin" ? "block" : "none";
 }
@@ -1670,6 +1673,148 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
     Servicio: r.servicio, Usuario: r.usuario, Contraseña: r.password, Notas: r.notas,
   }));
   exportarExcel(filas, `Credenciales - ${nombreEmpresa}.xlsx`, "Credenciales");
+});
+
+// ------------------------------------------------------------
+// Reportes de trabajo (bitácora de visitas/soportes, presenciales o
+// remotos). Visibles para todo el equipo; el técnico queda registrado
+// automáticamente a partir de la sesión — no se escribe a mano.
+// ------------------------------------------------------------
+
+let empresaRepActual = null;
+let reporteEditandoId = null;
+
+$("repEmpresaSelect").addEventListener("change", async (e) => {
+  cancelarEdicionReporte();
+  empresaRepActual = e.target.value || null;
+  sincronizarEmpresaGlobal(empresaRepActual);
+  await cargarReportes();
+});
+
+$("btnGuardarReporte").addEventListener("click", async () => {
+  $("reporteError").textContent = "";
+  if (!empresaRepActual) { $("reporteError").textContent = "Selecciona una empresa primero."; return; }
+  const fecha = $("repFecha").value;
+  const horaInicio = $("repHoraInicio").value;
+  const descripcion = $("repDescripcion").value.trim();
+  if (!fecha) { $("reporteError").textContent = "Indica la fecha."; return; }
+  if (!horaInicio) { $("reporteError").textContent = "Indica la hora de inicio."; return; }
+  if (!descripcion) { $("reporteError").textContent = "Describe qué se hizo o qué se encontró."; return; }
+
+  const registro = {
+    empresa_id: empresaRepActual,
+    fecha,
+    tipo: $("repTipo").value,
+    hora_inicio: horaInicio,
+    hora_fin: $("repHoraFin").value || null,
+    descripcion,
+    solucion: $("repSolucion").value.trim() || null,
+  };
+  if (!reporteEditandoId) {
+    registro.tecnico_nombre = perfil?.nombre || emailAUsuario(sesion?.user?.email) || "";
+    registro.creado_por = sesion?.user?.email || null;
+  }
+
+  const { error } = reporteEditandoId
+    ? await sb.from("reportes_trabajo").update(registro).eq("id", reporteEditandoId)
+    : await sb.from("reportes_trabajo").insert(registro);
+  if (error) { $("reporteError").textContent = "Error al guardar: " + error.message; return; }
+
+  toast(reporteEditandoId ? "Reporte actualizado." : "Reporte guardado.");
+  cancelarEdicionReporte();
+  await cargarReportes();
+});
+
+function cancelarEdicionReporte() {
+  reporteEditandoId = null;
+  $("repFecha").value = new Date().toISOString().slice(0, 10);
+  $("repTipo").value = "presencial";
+  $("repHoraInicio").value = "";
+  $("repHoraFin").value = "";
+  $("repDescripcion").value = "";
+  $("repSolucion").value = "";
+  $("repFormTitulo").textContent = "Nuevo reporte";
+  $("btnGuardarReporte").textContent = "Guardar reporte";
+  $("btnCancelarEdicionReporte").style.display = "none";
+  $("reporteError").textContent = "";
+}
+$("btnCancelarEdicionReporte").addEventListener("click", cancelarEdicionReporte);
+
+async function cargarReportes() {
+  const tbody = $("tablaReportes");
+  tbody.innerHTML = "";
+  if (!empresaRepActual) { $("reportesEmpty").style.display = "block"; $("reportesEmpty").textContent = "Selecciona una empresa arriba."; return; }
+
+  const { data, error } = await sb
+    .from("reportes_trabajo").select("*")
+    .eq("empresa_id", empresaRepActual)
+    .order("fecha", { ascending: false })
+    .order("hora_inicio", { ascending: false });
+
+  if (error) { toast("Error al cargar reportes: " + error.message, true); return; }
+
+  $("reportesEmpty").style.display = (data && data.length) ? "none" : "block";
+  $("reportesEmpty").textContent = "Sin reportes para esta empresa todavía.";
+
+  (data || []).forEach((r) => {
+    const horario = r.hora_inicio ? r.hora_inicio.slice(0, 5) + (r.hora_fin ? " – " + r.hora_fin.slice(0, 5) : "") : "—";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${fmtFechaCorta(r.fecha)}</td>
+      <td><span class="pill">${r.tipo === "remoto" ? "Remoto" : "Presencial"}</span></td>
+      <td>${horario}</td>
+      <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
+      <td>${escapeHtml(r.descripcion)}</td>
+      <td>${escapeHtml(r.solucion || "—")}</td>
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-reporte="${r.id}">Editar</button>
+        ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-reporte="${r.id}">Borrar</button>` : ""}
+      </td>`;
+    tbody.appendChild(tr);
+    tr.dataset.reporteJson = JSON.stringify(r);
+  });
+
+  tbody.querySelectorAll("[data-editar-reporte]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const r = JSON.parse(b.closest("tr").dataset.reporteJson);
+      reporteEditandoId = r.id;
+      $("repFecha").value = r.fecha || "";
+      $("repTipo").value = r.tipo || "presencial";
+      $("repHoraInicio").value = r.hora_inicio ? r.hora_inicio.slice(0, 5) : "";
+      $("repHoraFin").value = r.hora_fin ? r.hora_fin.slice(0, 5) : "";
+      $("repDescripcion").value = r.descripcion || "";
+      $("repSolucion").value = r.solucion || "";
+      $("repFormTitulo").textContent = "Editar reporte";
+      $("btnGuardarReporte").textContent = "Guardar cambios";
+      $("btnCancelarEdicionReporte").style.display = "inline-block";
+      $("reporteError").textContent = "";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  document.querySelectorAll("[data-borrar-reporte]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("¿Borrar este reporte?")) return;
+      const { error } = await sb.from("reportes_trabajo").delete().eq("id", b.dataset.borrarReporte);
+      if (error) { toast("Error al borrar: " + error.message, true); return; }
+      if (reporteEditandoId === b.dataset.borrarReporte) cancelarEdicionReporte();
+      await cargarReportes();
+    });
+  });
+}
+
+$("btnExportarReportes").addEventListener("click", async () => {
+  if (!empresaRepActual) { toast("Selecciona una empresa primero.", true); return; }
+  const { data, error } = await sb.from("reportes_trabajo").select("*").eq("empresa_id", empresaRepActual).order("fecha", { ascending: false });
+  if (error) { toast("Error al exportar: " + error.message, true); return; }
+  const nombreEmpresa = empresas.find((e) => e.id === empresaRepActual)?.nombre || "empresa";
+
+  const filas = (data || []).map((r) => ({
+    Fecha: r.fecha, Tipo: r.tipo === "remoto" ? "Remoto" : "Presencial",
+    "Hora inicio": r.hora_inicio, "Hora fin": r.hora_fin,
+    Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
+  }));
+  exportarExcel(filas, `Reportes - ${nombreEmpresa}.xlsx`, "Reportes");
 });
 
 // ------------------------------------------------------------

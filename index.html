@@ -779,6 +779,10 @@ body.ficha-abierta { overflow: hidden; }
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Monitoreo</span>
       </button>
+      <button class="nav-btn" data-view="reportes" id="navReportes">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 13h6M9 16.5h6M9 9.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Reportes</span>
+      </button>
       <button class="nav-btn" data-view="equipo" id="navEquipo" style="display:none;">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="17.5" cy="8.5" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M15.8 14.3c2.6.3 4.7 2.2 4.7 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <span>Equipo</span>
@@ -1194,6 +1198,58 @@ body.ficha-abierta { overflow: hidden; }
           </table>
         </div>
         <div class="empty-state" id="routersEmpty" style="display:none;">Esta empresa todavía no tiene un router configurado.</div>
+      </div>
+    </section>
+
+    <!-- ---------- Vista: Reportes de trabajo ---------- -->
+    <section class="view" id="view-reportes">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 13h6M9 16.5h6M9 9.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div>
+          <h1>Reportes de trabajo</h1>
+          <p class="sub">Bitácora de visitas y soportes — presenciales o remotos.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="repEmpresaSelect">Empresa</label>
+          <select id="repEmpresaSelect"></select>
+        </div>
+        <button class="btn-secondary" id="btnExportarReportes">Exportar a Excel</button>
+      </div>
+
+      <div class="card">
+        <h3 id="repFormTitulo">Nuevo reporte</h3>
+        <div class="form-grid">
+          <div><label for="repFecha">Fecha</label><input type="date" id="repFecha" /></div>
+          <div><label for="repTipo">Tipo</label>
+            <select id="repTipo">
+              <option value="presencial">Presencial</option>
+              <option value="remoto">Remoto</option>
+            </select>
+          </div>
+          <div><label for="repHoraInicio">Hora inicio</label><input type="time" id="repHoraInicio" /></div>
+          <div><label for="repHoraFin">Hora fin</label><input type="time" id="repHoraFin" /></div>
+          <div class="full"><label for="repDescripcion">Descripción</label><textarea id="repDescripcion" rows="3" placeholder="Qué se hizo / qué se encontró"></textarea></div>
+          <div class="full"><label for="repSolucion">Solución</label><textarea id="repSolucion" rows="3" placeholder="Cómo quedó resuelto (o qué queda pendiente)"></textarea></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarReporte">Guardar reporte</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionReporte" type="button">Cancelar</button>
+        </div>
+        <div class="error-msg" id="reporteError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Reportes registrados</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th></th></tr></thead>
+            <tbody id="tablaReportes"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="reportesEmpty" style="display:none;">Selecciona una empresa arriba.</div>
       </div>
     </section>
 
