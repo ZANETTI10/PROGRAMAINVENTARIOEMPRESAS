@@ -1288,12 +1288,14 @@ function construirDetalleEquipoHtml(r) {
 }
 
 const ACCIONES_REMOTAS = {
+  forzar_reporte: "Revisar ahora (actualizar reporte)",
   liberar_memoria: "Liberar memoria",
   limpiar_temporales: "Limpiar temporales",
   reiniciar_explorer: "Reiniciar Explorer",
   reiniciar_equipo: "Reiniciar equipo",
 };
 const CONFIRMACIONES_ACCION_REMOTA = {
+  forzar_reporte: "¿Pedirle a este equipo que revise su estado (disco, antivirus, seguridad) y mande el reporte ya mismo, en vez de esperar al próximo reporte automático? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
   liberar_memoria: "¿Liberar memoria RAM en este equipo? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
   limpiar_temporales: "¿Limpiar archivos temporales y vaciar la papelera de este equipo? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
   reiniciar_explorer: "¿Reiniciar el Explorador de Windows (barra de tareas/escritorio) de este equipo? Se ejecuta la próxima vez que el equipo consulte (hasta 15 min).",
@@ -1970,7 +1972,7 @@ async function cargarEquiposRevision() {
 
   const { data: eqs, error } = await sb
     .from("equipos")
-    .select("id, nombre_red, tipo_equipo, responsable, serial, empresa_id, origen, inactivo, actualizado_en, disco_libre_pct, es_servidor, empresas(nombre)")
+    .select("*, empresas(nombre)")
     .eq("inactivo", false);
   if (error) { console.error(error); return; }
 
@@ -2010,9 +2012,20 @@ async function cargarEquiposRevision() {
         <td>${escapeHtml(nombreEquipo)}${equipo.serial ? `<br><span class="sub" style="font-size:12px;">Serial: ${escapeHtml(equipo.serial)}</span>` : ""}</td>
         <td>${motivo}</td>
         <td><span class="pill" style="${revisado ? "background:#d1fae5;color:#065f46;" : "background:#fee2e2;color:#991b1b;"}">${revisado ? "Revisado" : "Pendiente"}</span></td>
-        <td><button class="icon-btn" data-registrar-revision="${equipo.id}" data-empresa="${equipo.empresa_id}">Registrar reporte</button></td>`;
+        <td style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="icon-btn" data-ver-equipo-revision="${equipo.id}">Ver reporte</button>
+          <button class="icon-btn" data-registrar-revision="${equipo.id}" data-empresa="${equipo.empresa_id}">Registrar reporte</button>
+        </td>`;
+      tr.dataset.equipoJson = JSON.stringify(equipo);
       tbody.appendChild(tr);
     });
+
+  tbody.querySelectorAll("[data-ver-equipo-revision]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const equipo = JSON.parse(b.closest("tr").dataset.equipoJson);
+      abrirDetalleEquipo(equipo);
+    });
+  });
 
   tbody.querySelectorAll("[data-registrar-revision]").forEach((b) => {
     b.addEventListener("click", async () => {

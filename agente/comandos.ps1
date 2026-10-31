@@ -348,6 +348,7 @@ try {
         "actualizar_firmas"  { $resultado = Ejecutar-ActualizarFirmas; $reportarDespues = $true }
         "activar_proteccion" { $resultado = Ejecutar-ActivarProteccion; $reportarDespues = $true }
         "eliminar_amenazas"  { $resultado = Ejecutar-EliminarAmenazas; $reportarDespues = $true }
+        "forzar_reporte"     { $resultado = "Reporte completo enviado de inmediato."; $reportarDespues = $true }
         default { $exito = $false; $resultado = "Accion desconocida: $accion" }
       }
     } catch {
