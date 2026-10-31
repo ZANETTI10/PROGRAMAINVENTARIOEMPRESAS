@@ -36,6 +36,7 @@ $dir = "$env:ProgramData\HelpdeskTI"
 $tokenPath = Join-Path $dir "token.txt"
 $logPath = Join-Path $dir "comandos.log"
 $reportarPath = Join-Path $dir "reportar.ps1"
+$comandosPath = Join-Path $dir "comandos.ps1"
 $huellaPath = Join-Path $dir "seguridad_huella.txt"
 
 function Log($msg) {
@@ -57,6 +58,47 @@ $headers = @{
   "Content-Type" = "application/json; charset=utf-8"
 }
 $urlBase = "https://jkeqpwzricshyibqyose.supabase.co/functions/v1/agente-comandos"
+
+# ---- Autoactualizacion: en cada pasada revisa si reportar.ps1 o este
+# mismo comandos.ps1 cambiaron en el repositorio (nuevas acciones,
+# correcciones), y si cambiaron, reemplaza la copia local -- asi no
+# hay que reinstalar el agente a mano en cada equipo para que reciba
+# las novedades. Si algo falla (sin internet, GitHub Pages caido), se
+# sigue de largo con la copia que ya estaba en el equipo. ----
+$comandosUrl = "https://zanetti10.github.io/PROGRAMAINVENTARIOEMPRESAS/agente/comandos.ps1"
+$reportarUrl = "https://zanetti10.github.io/PROGRAMAINVENTARIOEMPRESAS/agente/reportar.ps1"
+
+function Actualizar-ArchivoSiCambio($url, $rutaLocal, $nombre) {
+  try {
+    $remoto = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20).Content
+    if (-not $remoto -or -not $remoto.Trim()) { return $false }
+    $local = $null
+    if (Test-Path $rutaLocal) { $local = Get-Content -Path $rutaLocal -Raw -ErrorAction SilentlyContinue }
+    if ($local -and ($local.Trim() -eq $remoto.Trim())) { return $false }
+    Set-Content -Path $rutaLocal -Value $remoto -Encoding UTF8
+    Log "$nombre actualizado a la ultima version disponible."
+    return $true
+  } catch {
+    Log "No se pudo revisar actualizacion de $nombre : $($_.Exception.Message)"
+    return $false
+  }
+}
+
+$rutaPropia = if ($PSCommandPath) { $PSCommandPath } else { $comandosPath }
+$seActualizoComandos = Actualizar-ArchivoSiCambio $comandosUrl $rutaPropia "comandos.ps1"
+Actualizar-ArchivoSiCambio $reportarUrl $reportarPath "reportar.ps1" | Out-Null
+
+if ($seActualizoComandos) {
+  # Relanza la version ya actualizada de inmediato (para no esperar a
+  # la siguiente pasada de 15 min) y termina esta corrida vieja.
+  Log "Relanzando comandos.ps1 con la version actualizada."
+  try {
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$rutaPropia`"" -WindowStyle Hidden
+  } catch {
+    Log "No se pudo relanzar tras actualizar: $($_.Exception.Message)"
+  }
+  exit 0
+}
 
 function Obtener-Serial {
   try { return (Get-CimInstance -ClassName Win32_BIOS -ErrorAction Stop).SerialNumber } catch { return $null }
