@@ -73,6 +73,7 @@ async function entrarApp(session) {
   await cargarPersonal();
   if (perfil.rol === "admin") await cargarUsuarios();
   cargarDashboard();
+  cargarTecnicosLista();
   cancelarEdicionReporte();
   cargarReportesPorDia();
 }
@@ -1718,8 +1719,10 @@ $("btnGuardarReporte").addEventListener("click", async () => {
   const fecha = $("repFecha").value;
   const horaInicio = $("repHoraInicio").value;
   const descripcion = $("repDescripcion").value.trim();
+  const tecnico = $("repTecnico").value.trim();
   if (!fecha) { $("reporteError").textContent = "Indica la fecha."; return; }
   if (!horaInicio) { $("reporteError").textContent = "Indica la hora de inicio."; return; }
+  if (!tecnico) { $("reporteError").textContent = "Indica qué técnico atendió el caso."; return; }
   if (!descripcion) { $("reporteError").textContent = "Describe qué se hizo o qué se encontró."; return; }
 
   const registro = {
@@ -1735,10 +1738,8 @@ $("btnGuardarReporte").addEventListener("click", async () => {
     monto_pendiente: (!esEmpresaContratoFijo(empresaRepActual) && $("repMontoPendiente").value !== "")
       ? Number($("repMontoPendiente").value) : null,
   };
-  if (!reporteEditandoId) {
-    registro.tecnico_nombre = perfil?.nombre || emailAUsuario(sesion?.user?.email) || "";
-    registro.creado_por = sesion?.user?.email || null;
-  }
+  registro.tecnico_nombre = tecnico;
+  if (!reporteEditandoId) registro.creado_por = sesion?.user?.email || null;
 
   const { error } = reporteEditandoId
     ? await sb.from("reportes_trabajo").update(registro).eq("id", reporteEditandoId)
@@ -1757,6 +1758,7 @@ function cancelarEdicionReporte() {
   $("repTipo").value = "presencial";
   $("repHoraInicio").value = "";
   $("repHoraFin").value = "";
+  $("repTecnico").value = perfil?.nombre || emailAUsuario(sesion?.user?.email) || "";
   $("repUsuarioArea").value = "";
   $("repMontoPendiente").value = "";
   $("repDescripcion").value = "";
@@ -1815,6 +1817,7 @@ async function cargarReportes() {
       $("repTipo").value = r.tipo || "presencial";
       $("repHoraInicio").value = r.hora_inicio ? r.hora_inicio.slice(0, 5) : "";
       $("repHoraFin").value = r.hora_fin ? r.hora_fin.slice(0, 5) : "";
+      $("repTecnico").value = r.tecnico_nombre || "";
       $("repUsuarioArea").value = r.usuario_area || "";
       $("repDescripcion").value = r.descripcion || "";
       $("repSolucion").value = r.solucion || "";
@@ -1877,6 +1880,17 @@ function pintarResumenTecnicos(filas) {
         <td>${t.pendiente ? fmtMonto(t.pendiente) : "—"}</td>`;
       tbody.appendChild(tr);
     });
+}
+
+async function cargarTecnicosLista() {
+  const dl = $("repTecnicoLista");
+  if (!dl) return;
+  const { data, error } = await sb.from("usuarios_perfil").select("nombre").order("nombre");
+  if (error) { console.error(error); return; }
+  dl.innerHTML = (data || [])
+    .filter((u) => u.nombre)
+    .map((u) => `<option value="${escapeAttr(u.nombre)}"></option>`)
+    .join("");
 }
 
 async function cargarReportesPorDia() {
