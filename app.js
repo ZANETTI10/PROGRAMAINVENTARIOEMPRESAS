@@ -1538,6 +1538,68 @@ $("btnCopiarComandoAgente").addEventListener("click", async () => {
   }
 });
 
+// ------------------------------------------------------------
+// Respaldo mensual automático de MikroTik: genera (o reutiliza) el
+// token de la empresa seleccionada en Monitoreo y arma el script de
+// RouterOS listo para pegar en el router. Ese script se autoregistra
+// solo (por su serial) y manda su respaldo cada 4 semanas — ver
+// agente/mikrotik-respaldo.rsc y la función "mikrotik-respaldo".
+// ------------------------------------------------------------
+const PLANTILLA_SCRIPT_RESPALDO_MIKROTIK = `/system script add name="helpdeskti-respaldo" source={
+  :local token "TOKEN_AQUI";
+  :local urlBase "https://jkeqpwzricshyibqyose.supabase.co/functions/v1/mikrotik-respaldo";
+  :local apikey "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprZXFwd3pyaWNzaHlpYnF5b3NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMTYsImV4cCI6MjEwNDQ2NzIxNn0.PvylLQ1jhmMKyJZTj6EnwSrWcsXdMnUmOs9bhs9TXJA";
+  :local archivoBase "helpdeskti-respaldo";
+  /export file=$archivoBase;
+  :delay 2s;
+  :local archivo ($archivoBase . ".rsc");
+  :local contenido [/file get [/file find name=$archivo] contents];
+  :local identidad [/system identity get name];
+  :local modelo "desconocido";
+  :local serial "desconocido";
+  :do {
+    :set modelo [/system routerboard get model];
+    :set serial [/system routerboard get serial-number];
+  } on-error={};
+  :local version [/system resource get version];
+  :local headers "apikey:$apikey,Content-Type:text/plain,X-Token:$token,X-Identidad:$identidad,X-Serial:$serial,X-Modelo:$modelo,X-Version:$version";
+  /tool fetch url=$urlBase http-method=post http-data=$contenido http-header-field=$headers output=none;
+  /file remove [/file find name=$archivo];
+}
+/system script run helpdeskti-respaldo
+/system scheduler add name="helpdeskti-respaldo" interval=4w start-time=startup on-event=helpdeskti-respaldo`;
+
+$("btnGenerarTokenRespaldo").addEventListener("click", async () => {
+  if (!empresaMonitoreoActual) { toast("Selecciona una empresa primero.", true); return; }
+  const boton = $("btnGenerarTokenRespaldo");
+  boton.disabled = true;
+  try {
+    const { data, error } = await sb.functions.invoke("mikrotik-config", {
+      body: { accion: "generar_token_respaldo", empresa_id: empresaMonitoreoActual },
+    });
+    if (error || data?.error) { toast("Error al generar el token: " + (data?.error || error.message), true); return; }
+
+    const script = PLANTILLA_SCRIPT_RESPALDO_MIKROTIK.replace("TOKEN_AQUI", data.token);
+    $("respaldoScript").value = script;
+    $("respaldoScriptWrap").style.display = "block";
+    toast(data.reutilizado ? "Ya había un token activo para esta empresa — aquí está el script." : "Token generado.");
+  } finally {
+    boton.disabled = false;
+  }
+});
+
+$("btnCopiarRespaldoScript").addEventListener("click", async () => {
+  const texto = $("respaldoScript").value;
+  if (!texto) return;
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast("Script copiado.");
+  } catch {
+    $("respaldoScript").select();
+    toast("No se pudo copiar automático — está seleccionado, usa Ctrl+C.", true);
+  }
+});
+
 $("btnExportarInventario").addEventListener("click", async () => {
   if (!empresaInvActual) { toast("Selecciona una empresa primero.", true); return; }
   const { data, error } = await sb.from("equipos").select("*").eq("empresa_id", empresaInvActual).order("created_at");
@@ -2648,11 +2710,22 @@ async function cargarRoutersConfigurados() {
 
   routers.forEach((r) => {
     const tr = document.createElement("tr");
+    const host = r.host ? `${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}` : `<span class="sub">Sin configurar</span>`;
+    let respaldoHtml;
+    if (!r.respaldo_en) {
+      respaldoHtml = r.origen === "script" ? `<span class="pill pill-warn">Esperando primer respaldo</span>` : `<span class="sub">Sin script instalado</span>`;
+    } else {
+      const diasRespaldo = Math.floor((Date.now() - new Date(r.respaldo_en).getTime()) / 86400000);
+      const clase = diasRespaldo > 35 ? "pill-bad" : (diasRespaldo > 31 ? "pill-warn" : "pill-ok");
+      respaldoHtml = `<span class="pill ${clase}">Respaldado ${formatearHaceTiempo(r.respaldo_en)}</span>`;
+    }
     tr.innerHTML = `
-      <td>${escapeHtml(r.nombre)}</td>
-      <td>${escapeHtml(r.host)}:${escapeHtml(String(r.puerto))}${r.via_agente ? ` <span class="pill pill-warn">Vía agente</span>` : ""}</td>
+      <td>${escapeHtml(r.nombre)}${r.origen === "script" ? ` <span class="pill">Autoregistrado</span>` : ""}</td>
+      <td>${host}${r.via_agente ? ` <span class="pill pill-warn">Vía agente</span>` : ""}</td>
       <td>${escapeHtml(r.wan_interface)} / ${escapeHtml(r.lan_interface)}</td>
+      <td>${respaldoHtml}</td>
       <td class="actions-cell">
+        ${r.respaldo_en ? `<button class="icon-btn" data-descargar-respaldo="${r.id}">Descargar respaldo</button>` : ""}
         <button class="icon-btn" data-hora-router-tabla="${r.id}" data-hora-nombre="${escapeAttr(r.nombre || "")}">Hora CO</button>
         <button class="icon-btn" data-reiniciar-router-tabla="${r.id}" data-reiniciar-nombre="${escapeAttr(r.nombre || "")}">Reiniciar</button>
         <button class="icon-btn" data-editar-router="${r.id}">Editar</button>
@@ -2660,6 +2733,32 @@ async function cargarRoutersConfigurados() {
       </td>`;
     tbody.appendChild(tr);
     tr.dataset.routerJson = JSON.stringify(r);
+  });
+
+  tbody.querySelectorAll("[data-descargar-respaldo]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        const { data, error } = await sb.functions.invoke("mikrotik-config", {
+          body: { accion: "obtener_respaldo", id: b.dataset.descargarRespaldo },
+        });
+        if (error || data?.error) { toast("Error al obtener el respaldo: " + (data?.error || error.message), true); return; }
+        const r = data.respaldo;
+        if (!r?.respaldo_config) { toast("Este router todavía no tiene un respaldo guardado.", true); return; }
+        const blob = new Blob([r.respaldo_config], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const nombreArchivo = `${(r.identidad || r.nombre || "mikrotik").replace(/[^a-z0-9-_]+/gi, "_")}-respaldo-${(r.respaldo_en || "").slice(0, 10)}.rsc`;
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombreArchivo;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } finally {
+        b.disabled = false;
+      }
+    });
   });
 
   tbody.querySelectorAll("[data-editar-router]").forEach((b) => {

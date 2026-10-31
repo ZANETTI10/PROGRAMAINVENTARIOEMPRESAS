@@ -1203,9 +1203,21 @@ body.ficha-abierta { overflow: hidden; }
         </div>
         <div class="error-msg" id="routerError"></div>
 
+        <div style="margin-top:22px; padding-top:18px; border-top:1px solid var(--border);">
+          <h4 style="margin:0 0 6px;">Respaldo mensual automático (MikroTik)</h4>
+          <p class="sub" style="margin:0 0 12px;">Un script que se instala UNA vez en cada router (RouterOS) y manda solo, cada mes, un respaldo de su configuración — el router queda registrado solo en la lista de abajo, por su serial, sin tener que crearlo a mano primero.</p>
+          <button class="btn-secondary" style="width:auto;" id="btnGenerarTokenRespaldo" type="button">Generar token de respaldo</button>
+          <div id="respaldoScriptWrap" style="display:none; margin-top:14px;">
+            <label for="respaldoScript">Pega esto completo en la Terminal del router (WinBox o SSH, con permisos de administrador)</label>
+            <textarea id="respaldoScript" rows="4" readonly style="font-family:monospace; font-size:12px;"></textarea>
+            <button class="btn-secondary" style="width:auto; margin-top:10px;" id="btnCopiarRespaldoScript" type="button">Copiar script</button>
+            <p class="sub" style="margin-top:10px;">Queda corriendo solo cada 4 semanas. El respaldo es la configuración exportada (texto), no el archivo binario — se puede descargar desde la tabla de abajo.</p>
+          </div>
+        </div>
+
         <div class="table-wrap" style="margin-top:22px;">
           <table>
-            <thead><tr><th>Nombre</th><th>Host</th><th>Interfaces (WAN/LAN)</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Host</th><th>Interfaces (WAN/LAN)</th><th>Respaldo</th><th></th></tr></thead>
             <tbody id="tablaRouters"></tbody>
           </table>
         </div>

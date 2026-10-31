@@ -3,7 +3,11 @@
 // ------------------------------------------------------------
 // Permite que el ADMINISTRADOR guarde, edite, liste y elimine los
 // datos de conexión de los routers MikroTik de cada empresa (para el
-// monitoreo de WAN/LAN en tiempo real).
+// monitoreo de WAN/LAN en tiempo real), y maneje el respaldo mensual
+// automático: generar el token de instalación del script que corre
+// EN el router (ver agente/mikrotik-respaldo.rsc y la función
+// "mikrotik-respaldo", que es la que recibe lo que ese script manda)
+// y leer el contenido del último respaldo guardado.
 //
 // Por seguridad, esta función corre en el servidor de Supabase, no en
 // el navegador: usa la llave "service_role" (secreta) para leer/escribir
@@ -206,6 +210,12 @@ class MikrotikApi {
   }
 }
 
+function generarToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -246,7 +256,7 @@ Deno.serve(async (req) => {
       }
       const { data, error } = await admin
         .from("mikrotik_routers")
-        .select("id, empresa_id, nombre, host, puerto, ssl, wan_interface, lan_interface, usuario, via_agente")
+        .select("id, empresa_id, nombre, host, puerto, ssl, wan_interface, lan_interface, usuario, via_agente, serial, identidad, modelo, routeros_version, origen, respaldo_en, actualizado_en")
         .eq("empresa_id", body.empresa_id)
         .order("nombre");
 
@@ -307,6 +317,50 @@ Deno.serve(async (req) => {
       const { error } = await admin.from("mikrotik_routers").delete().eq("id", body.id);
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true });
+    }
+
+    // ---------------- Generar / reutilizar token de respaldo ----------------
+    // El token identifica la EMPRESA (igual que equipos_tokens para el
+    // agente de Windows) — no un router en particular. El script que se
+    // pega en cada router de esa empresa se autoregistra solo, por su
+    // serial, la primera vez que manda su respaldo (ver la función
+    // "mikrotik-respaldo"). Si ya había un token activo para la empresa,
+    // se devuelve el mismo en vez de crear otro.
+    if (accion === "generar_token_respaldo") {
+      const empresaId = body.empresa_id;
+      if (!empresaId) return json({ error: "Falta la empresa." }, 400);
+
+      const { data: existente, error: errExistente } = await admin
+        .from("mikrotik_tokens")
+        .select("token")
+        .eq("empresa_id", empresaId)
+        .eq("activo", true)
+        .limit(1)
+        .maybeSingle();
+      if (errExistente) return json({ error: errExistente.message }, 400);
+      if (existente) return json({ token: existente.token, reutilizado: true });
+
+      const token = generarToken();
+      const { error: errCrear } = await admin.from("mikrotik_tokens").insert({
+        empresa_id: empresaId,
+        token,
+        creado_por: callerData.user.email || null,
+      });
+      if (errCrear) return json({ error: errCrear.message }, 400);
+      return json({ token, reutilizado: false });
+    }
+
+    // ---------------- Leer el último respaldo guardado ----------------
+    if (accion === "obtener_respaldo") {
+      if (!body.id) return json({ error: "Falta el router." }, 400);
+      const { data, error } = await admin
+        .from("mikrotik_routers")
+        .select("nombre, identidad, serial, modelo, routeros_version, respaldo_en, respaldo_config")
+        .eq("id", body.id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 400);
+      if (!data) return json({ error: "No se encontró ese router." }, 404);
+      return json({ respaldo: data });
     }
 
     // ---------------- Reiniciar ----------------
