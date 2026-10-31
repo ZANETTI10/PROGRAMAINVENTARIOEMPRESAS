@@ -872,6 +872,12 @@ body.ficha-abierta { overflow: hidden; }
             <label for="nuevaEmpresaHorario">Horario de atención</label>
             <input type="text" id="nuevaEmpresaHorario" placeholder="Ej: Lunes a sábado, 8am - 6pm" />
           </div>
+          <div class="field">
+            <label class="auto-refresh-field" for="nuevaEmpresaContratoFijo" style="margin-top:26px;">
+              <input type="checkbox" id="nuevaEmpresaContratoFijo" />
+              Contrato fijo (pago mensual recurrente)
+            </label>
+          </div>
           <button class="btn-primary" style="margin-top:0; width:auto;" id="btnCrearEmpresa">Agregar</button>
           <button class="btn-secondary" style="margin-top:0; width:auto; display:none;" id="btnCancelarEdicionEmpresa" type="button">Cancelar</button>
         </div>
@@ -881,7 +887,7 @@ body.ficha-abierta { overflow: hidden; }
         <h3>Listado</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Empresa</th><th>Horario</th><th>Equipos</th><th>Credenciales</th><th></th></tr></thead>
+            <thead><tr><th>Empresa</th><th>Horario</th><th>Contrato</th><th>Equipos</th><th>Credenciales</th><th></th></tr></thead>
             <tbody id="tablaEmpresas"></tbody>
           </table>
         </div>
@@ -1211,6 +1217,25 @@ body.ficha-abierta { overflow: hidden; }
         </div>
       </div>
 
+      <div class="card">
+        <h3>Resumen por técnico</h3>
+        <p class="sub" style="margin:0 0 12px;">Reportes y horas trabajadas en los últimos 30 días — para ver de un vistazo cómo viene cada uno.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Técnico</th><th>Reportes</th><th>Horas trabajadas</th><th>Pendiente por cobrar</th></tr></thead>
+            <tbody id="tablaResumenTecnicos"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="resumenTecnicosEmpty" style="display:none;">Sin reportes registrados en los últimos 30 días.</div>
+      </div>
+
+      <div class="card">
+        <h3>Todos los reportes por día</h3>
+        <p class="sub" style="margin:0 0 12px;">Últimos 30 días, todas las empresas.</p>
+        <div id="reportesPorDia"></div>
+        <div class="empty-state" id="reportesPorDiaEmpty" style="display:none;">Sin reportes registrados en los últimos 30 días.</div>
+      </div>
+
       <div class="toolbar">
         <div class="field">
           <label for="repEmpresaSelect">Empresa</label>
@@ -1232,8 +1257,10 @@ body.ficha-abierta { overflow: hidden; }
           <div><label for="repHoraInicio">Hora inicio</label><input type="time" id="repHoraInicio" /></div>
           <div><label for="repHoraFin">Hora fin</label><input type="time" id="repHoraFin" /></div>
           <div><label for="repUsuarioArea">Usuario / Área</label><input id="repUsuarioArea" placeholder="Nombre de quien usa el equipo o área" /></div>
+          <div class="campo-pendiente-pago" style="display:none;"><label for="repMontoPendiente">Pendiente por pagar</label><input type="number" id="repMontoPendiente" min="0" step="1000" placeholder="$ (déjalo vacío si no aplica)" /></div>
           <div class="full"><label for="repDescripcion">Descripción</label><textarea id="repDescripcion" rows="3" placeholder="Qué se hizo / qué se encontró"></textarea></div>
           <div class="full"><label for="repSolucion">Solución</label><textarea id="repSolucion" rows="3" placeholder="Cómo quedó resuelto (o qué queda pendiente)"></textarea></div>
+          <div class="full"><label for="repRecomendaciones">Recomendaciones para el cliente</label><textarea id="repRecomendaciones" rows="2" placeholder="Ej: renovar licencia, cambiar disco, agendar mantenimiento"></textarea></div>
         </div>
         <div style="display:flex; gap:10px; margin-top:18px;">
           <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarReporte">Guardar reporte</button>
@@ -1246,7 +1273,7 @@ body.ficha-abierta { overflow: hidden; }
         <h3>Reportes registrados</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Usuario/Área</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th></th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Usuario/Área</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th>Recomendaciones</th><th>Pendiente</th><th></th></tr></thead>
             <tbody id="tablaReportes"></tbody>
           </table>
         </div>

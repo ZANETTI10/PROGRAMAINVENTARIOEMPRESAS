@@ -74,6 +74,7 @@ async function entrarApp(session) {
   if (perfil.rol === "admin") await cargarUsuarios();
   cargarDashboard();
   cancelarEdicionReporte();
+  cargarReportesPorDia();
 }
 
 function usuarioAEmail(valor) {
@@ -749,6 +750,7 @@ async function cargarEmpresas() {
     tr.innerHTML = `
       <td>${escapeHtml(emp.nombre)}</td>
       <td>${emp.horario_atencion ? escapeHtml(emp.horario_atencion) : "<span class=\"sub\">Sin definir</span>"}</td>
+      <td>${emp.contrato_fijo ? "<span class=\"pill\">Fijo</span>" : "<span class=\"sub\">Por servicio</span>"}</td>
       <td><span class="pill">${contarEq(emp.id)}</span></td>
       <td><span class="pill">${contarCred(emp.id)}</span></td>
       <td class="actions-cell">
@@ -765,6 +767,7 @@ async function cargarEmpresas() {
       empresaEditandoId = emp.id;
       $("nuevaEmpresaNombre").value = emp.nombre || "";
       $("nuevaEmpresaHorario").value = emp.horario_atencion || "";
+      $("nuevaEmpresaContratoFijo").checked = !!emp.contrato_fijo;
       $("empresaFormTitulo").textContent = "Editar empresa";
       $("btnCrearEmpresa").textContent = "Guardar cambios";
       $("btnCancelarEdicionEmpresa").style.display = "inline-block";
@@ -792,10 +795,11 @@ let empresaEditandoId = null;
 $("btnCrearEmpresa").addEventListener("click", async () => {
   const nombre = $("nuevaEmpresaNombre").value.trim();
   const horario_atencion = $("nuevaEmpresaHorario").value.trim() || null;
+  const contrato_fijo = $("nuevaEmpresaContratoFijo").checked;
   if (!nombre) { toast("Escribe el nombre de la empresa.", true); return; }
   const { error } = empresaEditandoId
-    ? await sb.from("empresas").update({ nombre, horario_atencion }).eq("id", empresaEditandoId)
-    : await sb.from("empresas").insert({ nombre, horario_atencion });
+    ? await sb.from("empresas").update({ nombre, horario_atencion, contrato_fijo }).eq("id", empresaEditandoId)
+    : await sb.from("empresas").insert({ nombre, horario_atencion, contrato_fijo });
   if (error) { toast("Error al " + (empresaEditandoId ? "actualizar" : "crear") + ": " + error.message, true); return; }
   toast(empresaEditandoId ? "Empresa actualizada." : "Empresa agregada.");
   cancelarEdicionEmpresa();
@@ -806,6 +810,7 @@ function cancelarEdicionEmpresa() {
   empresaEditandoId = null;
   $("nuevaEmpresaNombre").value = "";
   $("nuevaEmpresaHorario").value = "";
+  $("nuevaEmpresaContratoFijo").checked = false;
   $("empresaFormTitulo").textContent = "Nueva empresa";
   $("btnCrearEmpresa").textContent = "Agregar";
   $("btnCancelarEdicionEmpresa").style.display = "none";
@@ -1162,6 +1167,11 @@ function fmtFechaCorta(iso) {
   if (!iso) return "";
   const d = new Date(iso + (iso.length <= 10 ? "T00:00:00" : ""));
   return d.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+function fmtMonto(n) {
+  if (n === null || n === undefined || n === "") return "";
+  return Number(n).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 }
 
 function datoHtml(etiqueta, valor) {
@@ -1684,10 +1694,21 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
 let empresaRepActual = null;
 let reporteEditandoId = null;
 
+function esEmpresaContratoFijo(empresaId) {
+  return !!empresas.find((e) => e.id === empresaId)?.contrato_fijo;
+}
+
+function actualizarVisibilidadPendientePago() {
+  const mostrar = empresaRepActual && !esEmpresaContratoFijo(empresaRepActual);
+  document.querySelectorAll(".campo-pendiente-pago").forEach((el) => { el.style.display = mostrar ? "" : "none"; });
+  if (!mostrar) $("repMontoPendiente").value = "";
+}
+
 $("repEmpresaSelect").addEventListener("change", async (e) => {
   cancelarEdicionReporte();
   empresaRepActual = e.target.value || null;
   sincronizarEmpresaGlobal(empresaRepActual);
+  actualizarVisibilidadPendientePago();
   await cargarReportes();
 });
 
@@ -1710,6 +1731,9 @@ $("btnGuardarReporte").addEventListener("click", async () => {
     usuario_area: $("repUsuarioArea").value.trim() || null,
     descripcion,
     solucion: $("repSolucion").value.trim() || null,
+    recomendaciones: $("repRecomendaciones").value.trim() || null,
+    monto_pendiente: (!esEmpresaContratoFijo(empresaRepActual) && $("repMontoPendiente").value !== "")
+      ? Number($("repMontoPendiente").value) : null,
   };
   if (!reporteEditandoId) {
     registro.tecnico_nombre = perfil?.nombre || emailAUsuario(sesion?.user?.email) || "";
@@ -1724,6 +1748,7 @@ $("btnGuardarReporte").addEventListener("click", async () => {
   toast(reporteEditandoId ? "Reporte actualizado." : "Reporte guardado.");
   cancelarEdicionReporte();
   await cargarReportes();
+  await cargarReportesPorDia();
 });
 
 function cancelarEdicionReporte() {
@@ -1733,8 +1758,11 @@ function cancelarEdicionReporte() {
   $("repHoraInicio").value = "";
   $("repHoraFin").value = "";
   $("repUsuarioArea").value = "";
+  $("repMontoPendiente").value = "";
   $("repDescripcion").value = "";
   $("repSolucion").value = "";
+  $("repRecomendaciones").value = "";
+  actualizarVisibilidadPendientePago();
   $("repFormTitulo").textContent = "Nuevo reporte";
   $("btnGuardarReporte").textContent = "Guardar reporte";
   $("btnCancelarEdicionReporte").style.display = "none";
@@ -1769,6 +1797,8 @@ async function cargarReportes() {
       <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
       <td>${escapeHtml(r.descripcion)}</td>
       <td>${escapeHtml(r.solucion || "—")}</td>
+      <td>${escapeHtml(r.recomendaciones || "—")}</td>
+      <td>${r.monto_pendiente ? `<span class="pill">${fmtMonto(r.monto_pendiente)}</span>` : "—"}</td>
       <td class="actions-cell">
         <button class="icon-btn" data-editar-reporte="${r.id}">Editar</button>
         ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-reporte="${r.id}">Borrar</button>` : ""}
@@ -1788,6 +1818,9 @@ async function cargarReportes() {
       $("repUsuarioArea").value = r.usuario_area || "";
       $("repDescripcion").value = r.descripcion || "";
       $("repSolucion").value = r.solucion || "";
+      $("repRecomendaciones").value = r.recomendaciones || "";
+      actualizarVisibilidadPendientePago();
+      $("repMontoPendiente").value = r.monto_pendiente ?? "";
       $("repFormTitulo").textContent = "Editar reporte";
       $("btnGuardarReporte").textContent = "Guardar cambios";
       $("btnCancelarEdicionReporte").style.display = "inline-block";
@@ -1803,7 +1836,100 @@ async function cargarReportes() {
       if (error) { toast("Error al borrar: " + error.message, true); return; }
       if (reporteEditandoId === b.dataset.borrarReporte) cancelarEdicionReporte();
       await cargarReportes();
+      await cargarReportesPorDia();
     });
+  });
+}
+
+function horasEntre(horaInicio, horaFin) {
+  if (!horaInicio || !horaFin) return 0;
+  const [h1, m1] = horaInicio.split(":").map(Number);
+  const [h2, m2] = horaFin.split(":").map(Number);
+  const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+  return diff > 0 ? diff / 60 : 0;
+}
+
+function pintarResumenTecnicos(filas) {
+  const tbody = $("tablaResumenTecnicos");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const porTecnico = new Map();
+  filas.forEach((r) => {
+    const nombre = r.tecnico_nombre || "Sin técnico";
+    if (!porTecnico.has(nombre)) porTecnico.set(nombre, { reportes: 0, horas: 0, pendiente: 0 });
+    const t = porTecnico.get(nombre);
+    t.reportes += 1;
+    t.horas += horasEntre(r.hora_inicio, r.hora_fin);
+    t.pendiente += Number(r.monto_pendiente) || 0;
+  });
+
+  $("resumenTecnicosEmpty").style.display = porTecnico.size ? "none" : "block";
+
+  [...porTecnico.entries()]
+    .sort((a, b) => b[1].horas - a[1].horas)
+    .forEach(([nombre, t]) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(nombre)}</td>
+        <td><span class="pill">${t.reportes}</span></td>
+        <td>${t.horas.toFixed(1)} h</td>
+        <td>${t.pendiente ? fmtMonto(t.pendiente) : "—"}</td>`;
+      tbody.appendChild(tr);
+    });
+}
+
+async function cargarReportesPorDia() {
+  const cont = $("reportesPorDia");
+  if (!cont) return;
+  const desde = new Date();
+  desde.setDate(desde.getDate() - 30);
+  const desdeIso = desde.toISOString().slice(0, 10);
+
+  const { data, error } = await sb
+    .from("reportes_trabajo")
+    .select("*, empresas(nombre)")
+    .gte("fecha", desdeIso)
+    .order("fecha", { ascending: false })
+    .order("hora_inicio", { ascending: false });
+
+  if (error) { toast("Error al cargar el resumen por día: " + error.message, true); return; }
+
+  $("reportesPorDiaEmpty").style.display = (data && data.length) ? "none" : "block";
+  cont.innerHTML = "";
+
+  pintarResumenTecnicos(data || []);
+
+  const porDia = new Map();
+  (data || []).forEach((r) => {
+    if (!porDia.has(r.fecha)) porDia.set(r.fecha, []);
+    porDia.get(r.fecha).push(r);
+  });
+
+  porDia.forEach((filas, fecha) => {
+    const grupo = document.createElement("div");
+    grupo.className = "reportes-dia-grupo";
+    grupo.style.marginBottom = "18px";
+    const horario = (r) => r.hora_inicio ? r.hora_inicio.slice(0, 5) + (r.hora_fin ? " – " + r.hora_fin.slice(0, 5) : "") : "—";
+    grupo.innerHTML = `
+      <h4 style="margin:0 0 8px;">${fmtFechaCorta(fecha)} <span class="pill">${filas.length}</span></h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Empresa</th><th>Tipo</th><th>Horario</th><th>Técnico</th><th>Descripción</th><th>Pendiente</th></tr></thead>
+          <tbody>
+            ${filas.map((r) => `
+              <tr>
+                <td>${escapeHtml(r.empresas?.nombre || "—")}</td>
+                <td><span class="pill">${r.tipo === "remoto" ? "Remoto" : "Presencial"}</span></td>
+                <td>${horario(r)}</td>
+                <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
+                <td>${escapeHtml(r.descripcion)}</td>
+                <td>${r.monto_pendiente ? fmtMonto(r.monto_pendiente) : "—"}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`;
+    cont.appendChild(grupo);
   });
 }
 
@@ -1817,6 +1943,7 @@ $("btnExportarReportes").addEventListener("click", async () => {
     Fecha: r.fecha, Tipo: r.tipo === "remoto" ? "Remoto" : "Presencial",
     "Hora inicio": r.hora_inicio, "Hora fin": r.hora_fin,
     "Usuario/Área": r.usuario_area, Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
+    Recomendaciones: r.recomendaciones, "Pendiente por pagar": r.monto_pendiente,
   }));
   exportarExcel(filas, `Reportes - ${nombreEmpresa}.xlsx`, "Reportes");
 });
