@@ -1970,7 +1970,7 @@ async function cargarEquiposRevision() {
 
   const { data: eqs, error } = await sb
     .from("equipos")
-    .select("id, nombre_red, tipo_equipo, responsable, empresa_id, origen, inactivo, actualizado_en, disco_libre_pct, es_servidor, empresas(nombre)")
+    .select("id, nombre_red, tipo_equipo, responsable, serial, empresa_id, origen, inactivo, actualizado_en, disco_libre_pct, es_servidor, empresas(nombre)")
     .eq("inactivo", false);
   if (error) { console.error(error); return; }
 
@@ -2004,9 +2004,10 @@ async function cargarEquiposRevision() {
     .forEach(({ equipo, motivo }) => {
       const revisado = revisadosEsteMes.has(equipo.id);
       const tr = document.createElement("tr");
+      const nombreEquipo = equipo.nombre_red || equipo.responsable || equipo.tipo_equipo || "Equipo";
       tr.innerHTML = `
         <td>${escapeHtml(equipo.empresas?.nombre || "—")}</td>
-        <td>${escapeHtml(equipo.nombre_red || equipo.responsable || equipo.tipo_equipo || "Equipo")}</td>
+        <td>${escapeHtml(nombreEquipo)}${equipo.serial ? `<br><span class="sub" style="font-size:12px;">Serial: ${escapeHtml(equipo.serial)}</span>` : ""}</td>
         <td>${motivo}</td>
         <td><span class="pill" style="${revisado ? "background:#d1fae5;color:#065f46;" : "background:#fee2e2;color:#991b1b;"}">${revisado ? "Revisado" : "Pendiente"}</span></td>
         <td><button class="icon-btn" data-registrar-revision="${equipo.id}" data-empresa="${equipo.empresa_id}">Registrar reporte</button></td>`;
