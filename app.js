@@ -76,6 +76,7 @@ async function entrarApp(session) {
   cargarTecnicosLista();
   cancelarEdicionReporte();
   cargarReportesPorDia();
+  cargarEquiposRevision();
 }
 
 function usuarioAEmail(valor) {
@@ -893,6 +894,7 @@ $("btnGuardarEquipo").addEventListener("click", async () => {
   registro.renting_proveedor = registro.es_renting ? $("eqRentingProveedor").value.trim() : "";
   registro.renting_inicio = registro.es_renting ? ($("eqRentingInicio").value || null) : null;
   registro.renting_fin = registro.es_renting ? ($("eqRentingFin").value || null) : null;
+  registro.es_servidor = $("eqEsServidor").checked;
 
   const { error } = equipoEditandoId
     ? await sb.from("equipos").update(registro).eq("id", equipoEditandoId)
@@ -910,6 +912,7 @@ function cancelarEdicionEquipo() {
   equipoEditandoId = null;
   CAMPOS_EQUIPO.forEach(([, id]) => { if (id !== "eqRegistradoPor") $(id).value = ""; });
   $("eqEsRenting").checked = false;
+  $("eqEsServidor").checked = false;
   $("eqCodigoRenting").value = "";
   $("eqRentingProveedor").value = "";
   $("eqRentingInicio").value = "";
@@ -1068,6 +1071,7 @@ async function cargarEquipos() {
       equipoEditandoId = r.id;
       CAMPOS_EQUIPO.forEach(([campo, id]) => { $(id).value = r[CAMPOS_EQUIPO_DB[campo]] || ""; });
       $("eqEsRenting").checked = !!r.es_renting;
+      $("eqEsServidor").checked = !!r.es_servidor;
       $("eqCodigoRenting").value = r.codigo_renting || "";
       $("eqRentingProveedor").value = r.renting_proveedor || "";
       $("eqRentingInicio").value = r.renting_inicio || "";
@@ -1694,6 +1698,26 @@ $("btnExportarCredenciales").addEventListener("click", async () => {
 
 let empresaRepActual = null;
 let reporteEditandoId = null;
+let equiposDeEmpresaRep = [];
+let repFotosExistentes = [];
+
+async function cargarEquiposParaReporte(empresaId) {
+  const sel = $("repEquipo");
+  equiposDeEmpresaRep = [];
+  if (!sel) return;
+  if (!empresaId) { sel.innerHTML = `<option value="">Sin equipo específico</option>`; return; }
+  const { data, error } = await sb
+    .from("equipos")
+    .select("id, nombre_red, tipo_equipo, responsable")
+    .eq("empresa_id", empresaId)
+    .eq("inactivo", false)
+    .order("nombre_red");
+  if (error) { console.error(error); return; }
+  equiposDeEmpresaRep = data || [];
+  sel.innerHTML = `<option value="">Sin equipo específico</option>` + equiposDeEmpresaRep
+    .map((e) => `<option value="${e.id}">${escapeHtml(e.nombre_red || e.responsable || e.tipo_equipo || "Equipo")}</option>`)
+    .join("");
+}
 
 function esEmpresaContratoFijo(empresaId) {
   return !!empresas.find((e) => e.id === empresaId)?.contrato_fijo;
@@ -1710,6 +1734,7 @@ $("repEmpresaSelect").addEventListener("change", async (e) => {
   empresaRepActual = e.target.value || null;
   sincronizarEmpresaGlobal(empresaRepActual);
   actualizarVisibilidadPendientePago();
+  await cargarEquiposParaReporte(empresaRepActual);
   await cargarReportes();
 });
 
@@ -1727,6 +1752,7 @@ $("btnGuardarReporte").addEventListener("click", async () => {
 
   const registro = {
     empresa_id: empresaRepActual,
+    equipo_id: $("repEquipo").value || null,
     fecha,
     tipo: $("repTipo").value,
     hora_inicio: horaInicio,
@@ -1741,15 +1767,41 @@ $("btnGuardarReporte").addEventListener("click", async () => {
   registro.tecnico_nombre = tecnico;
   if (!reporteEditandoId) registro.creado_por = sesion?.user?.email || null;
 
-  const { error } = reporteEditandoId
-    ? await sb.from("reportes_trabajo").update(registro).eq("id", reporteEditandoId)
-    : await sb.from("reportes_trabajo").insert(registro);
-  if (error) { $("reporteError").textContent = "Error al guardar: " + error.message; return; }
+  const botonGuardar = $("btnGuardarReporte");
+  const archivos = [...($("repFotos").files || [])];
+  botonGuardar.disabled = true;
+  const textoBotonOriginal = botonGuardar.textContent;
+  try {
+    if (archivos.length) {
+      botonGuardar.textContent = "Subiendo fotos…";
+      const urls = [];
+      for (const archivo of archivos) {
+        const ruta = `${empresaRepActual}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${archivo.name}`;
+        const { error: errSubir } = await sb.storage.from("reportes-fotos").upload(ruta, archivo);
+        if (errSubir) { $("reporteError").textContent = "Error al subir una foto: " + errSubir.message; return; }
+        const { data: pub } = sb.storage.from("reportes-fotos").getPublicUrl(ruta);
+        if (pub?.publicUrl) urls.push(pub.publicUrl);
+      }
+      registro.fotos = [...repFotosExistentes, ...urls];
+    } else if (reporteEditandoId) {
+      registro.fotos = repFotosExistentes.length ? repFotosExistentes : null;
+    }
 
-  toast(reporteEditandoId ? "Reporte actualizado." : "Reporte guardado.");
-  cancelarEdicionReporte();
-  await cargarReportes();
-  await cargarReportesPorDia();
+    botonGuardar.textContent = "Guardando…";
+    const { error } = reporteEditandoId
+      ? await sb.from("reportes_trabajo").update(registro).eq("id", reporteEditandoId)
+      : await sb.from("reportes_trabajo").insert(registro);
+    if (error) { $("reporteError").textContent = "Error al guardar: " + error.message; return; }
+
+    toast(reporteEditandoId ? "Reporte actualizado." : "Reporte guardado.");
+    cancelarEdicionReporte();
+    await cargarReportes();
+    await cargarReportesPorDia();
+    await cargarEquiposRevision();
+  } finally {
+    botonGuardar.disabled = false;
+    botonGuardar.textContent = textoBotonOriginal;
+  }
 });
 
 function cancelarEdicionReporte() {
@@ -1759,11 +1811,15 @@ function cancelarEdicionReporte() {
   $("repHoraInicio").value = "";
   $("repHoraFin").value = "";
   $("repTecnico").value = perfil?.nombre || emailAUsuario(sesion?.user?.email) || "";
+  $("repEquipo").value = "";
   $("repUsuarioArea").value = "";
   $("repMontoPendiente").value = "";
   $("repDescripcion").value = "";
   $("repSolucion").value = "";
   $("repRecomendaciones").value = "";
+  $("repFotos").value = "";
+  $("repFotosPreview").innerHTML = "";
+  repFotosExistentes = [];
   actualizarVisibilidadPendientePago();
   $("repFormTitulo").textContent = "Nuevo reporte";
   $("btnGuardarReporte").textContent = "Guardar reporte";
@@ -1778,7 +1834,7 @@ async function cargarReportes() {
   if (!empresaRepActual) { $("reportesEmpty").style.display = "block"; $("reportesEmpty").textContent = "Selecciona una empresa arriba."; return; }
 
   const { data, error } = await sb
-    .from("reportes_trabajo").select("*")
+    .from("reportes_trabajo").select("*, equipos(nombre_red, tipo_equipo, responsable)")
     .eq("empresa_id", empresaRepActual)
     .order("fecha", { ascending: false })
     .order("hora_inicio", { ascending: false });
@@ -1791,16 +1847,22 @@ async function cargarReportes() {
   (data || []).forEach((r) => {
     const horario = r.hora_inicio ? r.hora_inicio.slice(0, 5) + (r.hora_fin ? " – " + r.hora_fin.slice(0, 5) : "") : "—";
     const tr = document.createElement("tr");
+    const nombreEquipo = r.equipos ? (r.equipos.nombre_red || r.equipos.responsable || r.equipos.tipo_equipo) : null;
+    const fotos = Array.isArray(r.fotos) ? r.fotos : [];
     tr.innerHTML = `
       <td>${fmtFechaCorta(r.fecha)}</td>
       <td><span class="pill">${r.tipo === "remoto" ? "Remoto" : "Presencial"}</span></td>
       <td>${horario}</td>
+      <td>${escapeHtml(nombreEquipo || "—")}</td>
       <td>${escapeHtml(r.usuario_area || "—")}</td>
       <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
       <td>${escapeHtml(r.descripcion)}</td>
       <td>${escapeHtml(r.solucion || "—")}</td>
       <td>${escapeHtml(r.recomendaciones || "—")}</td>
-      <td>${r.monto_pendiente ? `<span class="pill">${fmtMonto(r.monto_pendiente)}</span>` : "—"}</td>
+      <td>${r.monto_pendiente
+        ? `<button class="icon-btn" data-toggle-pagado="${r.id}" data-pagado="${r.pagado ? "1" : "0"}" style="${r.pagado ? "text-decoration:line-through;opacity:.7;" : ""}">${fmtMonto(r.monto_pendiente)} — ${r.pagado ? "Pagado" : "Pendiente"}</button>`
+        : "—"}</td>
+      <td>${fotos.length ? fotos.map((u) => `<a href="${escapeAttr(u)}" target="_blank" rel="noopener"><img src="${escapeAttr(u)}" alt="foto" style="width:36px;height:36px;object-fit:cover;border-radius:6px;margin-right:4px;" /></a>`).join("") : "—"}</td>
       <td class="actions-cell">
         <button class="icon-btn" data-editar-reporte="${r.id}">Editar</button>
         ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-reporte="${r.id}">Borrar</button>` : ""}
@@ -1810,7 +1872,7 @@ async function cargarReportes() {
   });
 
   tbody.querySelectorAll("[data-editar-reporte]").forEach((b) => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       const r = JSON.parse(b.closest("tr").dataset.reporteJson);
       reporteEditandoId = r.id;
       $("repFecha").value = r.fecha || "";
@@ -1818,10 +1880,17 @@ async function cargarReportes() {
       $("repHoraInicio").value = r.hora_inicio ? r.hora_inicio.slice(0, 5) : "";
       $("repHoraFin").value = r.hora_fin ? r.hora_fin.slice(0, 5) : "";
       $("repTecnico").value = r.tecnico_nombre || "";
+      await cargarEquiposParaReporte(empresaRepActual);
+      $("repEquipo").value = r.equipo_id || "";
       $("repUsuarioArea").value = r.usuario_area || "";
       $("repDescripcion").value = r.descripcion || "";
       $("repSolucion").value = r.solucion || "";
       $("repRecomendaciones").value = r.recomendaciones || "";
+      $("repFotos").value = "";
+      repFotosExistentes = Array.isArray(r.fotos) ? r.fotos : [];
+      $("repFotosPreview").innerHTML = repFotosExistentes
+        .map((u) => `<img src="${escapeAttr(u)}" alt="foto" style="width:48px;height:48px;object-fit:cover;border-radius:6px;" />`)
+        .join("");
       actualizarVisibilidadPendientePago();
       $("repMontoPendiente").value = r.monto_pendiente ?? "";
       $("repFormTitulo").textContent = "Editar reporte";
@@ -1829,6 +1898,17 @@ async function cargarReportes() {
       $("btnCancelarEdicionReporte").style.display = "inline-block";
       $("reporteError").textContent = "";
       window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  tbody.querySelectorAll("[data-toggle-pagado]").forEach((b) => {
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const nuevoPagado = b.dataset.pagado !== "1";
+      const { error } = await sb.from("reportes_trabajo").update({ pagado: nuevoPagado }).eq("id", b.dataset.togglePagado);
+      if (error) { toast("Error al actualizar: " + error.message, true); return; }
+      await cargarReportes();
+      await cargarReportesPorDia();
     });
   });
 
@@ -1840,6 +1920,7 @@ async function cargarReportes() {
       if (reporteEditandoId === b.dataset.borrarReporte) cancelarEdicionReporte();
       await cargarReportes();
       await cargarReportesPorDia();
+      await cargarEquiposRevision();
     });
   });
 }
@@ -1880,6 +1961,76 @@ function pintarResumenTecnicos(filas) {
         <td>${t.pendiente ? fmtMonto(t.pendiente) : "—"}</td>`;
       tbody.appendChild(tr);
     });
+}
+
+async function cargarEquiposRevision() {
+  const tbody = $("tablaEquiposRevision");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const { data: eqs, error } = await sb
+    .from("equipos")
+    .select("id, nombre_red, tipo_equipo, responsable, empresa_id, origen, inactivo, actualizado_en, disco_libre_pct, es_servidor, empresas(nombre)")
+    .eq("inactivo", false);
+  if (error) { console.error(error); return; }
+
+  const inicioMes = new Date();
+  inicioMes.setDate(1);
+  const inicioMesIso = inicioMes.toISOString().slice(0, 10);
+
+  const { data: reps, error: errRep } = await sb
+    .from("reportes_trabajo")
+    .select("equipo_id")
+    .gte("fecha", inicioMesIso)
+    .not("equipo_id", "is", null);
+  if (errRep) console.error(errRep);
+  const revisadosEsteMes = new Set((reps || []).map((r) => r.equipo_id));
+
+  const items = [];
+  (eqs || []).forEach((e) => {
+    const estado = estadoEquipoInventario(e);
+    if (estado === "critico" || estado === "advertencia") {
+      items.push({ equipo: e, motivo: estado === "critico" ? "⛔ Crítico: revisar disco/antivirus/estado" : "⚠️ Advertencia: posible problema" });
+    }
+    if (e.es_servidor) {
+      items.push({ equipo: e, motivo: "💾 Revisar copia de seguridad mensual" });
+    }
+  });
+
+  $("equiposRevisionEmpty").style.display = items.length ? "none" : "block";
+
+  items
+    .sort((a, b) => (a.equipo.empresas?.nombre || "").localeCompare(b.equipo.empresas?.nombre || ""))
+    .forEach(({ equipo, motivo }) => {
+      const revisado = revisadosEsteMes.has(equipo.id);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(equipo.empresas?.nombre || "—")}</td>
+        <td>${escapeHtml(equipo.nombre_red || equipo.responsable || equipo.tipo_equipo || "Equipo")}</td>
+        <td>${motivo}</td>
+        <td><span class="pill" style="${revisado ? "background:#d1fae5;color:#065f46;" : "background:#fee2e2;color:#991b1b;"}">${revisado ? "Revisado" : "Pendiente"}</span></td>
+        <td><button class="icon-btn" data-registrar-revision="${equipo.id}" data-empresa="${equipo.empresa_id}">Registrar reporte</button></td>`;
+      tbody.appendChild(tr);
+    });
+
+  tbody.querySelectorAll("[data-registrar-revision]").forEach((b) => {
+    b.addEventListener("click", async () => {
+      const empresaId = b.dataset.empresa;
+      const equipoId = b.dataset.registrarRevision;
+      $("repEmpresaSelect").value = empresaId;
+      empresaRepActual = empresaId;
+      sincronizarEmpresaGlobal(empresaRepActual);
+      await cargarEquiposParaReporte(empresaRepActual);
+      cancelarEdicionReporte();
+      actualizarVisibilidadPendientePago();
+      $("repEquipo").value = equipoId;
+      await cargarReportes();
+      const eqInfo = equiposDeEmpresaRep.find((x) => x.id === equipoId);
+      $("repDescripcion").value = `Revisión de equipo${eqInfo ? ": " + (eqInfo.nombre_red || eqInfo.responsable || eqInfo.tipo_equipo || "") : ""}`;
+      const destino = $("repFormTitulo");
+      if (destino) window.scrollTo({ top: destino.offsetTop - 80, behavior: "smooth" });
+    });
+  });
 }
 
 async function cargarTecnicosLista() {
@@ -1949,15 +2100,17 @@ async function cargarReportesPorDia() {
 
 $("btnExportarReportes").addEventListener("click", async () => {
   if (!empresaRepActual) { toast("Selecciona una empresa primero.", true); return; }
-  const { data, error } = await sb.from("reportes_trabajo").select("*").eq("empresa_id", empresaRepActual).order("fecha", { ascending: false });
+  const { data, error } = await sb.from("reportes_trabajo").select("*, equipos(nombre_red, tipo_equipo, responsable)").eq("empresa_id", empresaRepActual).order("fecha", { ascending: false });
   if (error) { toast("Error al exportar: " + error.message, true); return; }
   const nombreEmpresa = empresas.find((e) => e.id === empresaRepActual)?.nombre || "empresa";
 
   const filas = (data || []).map((r) => ({
     Fecha: r.fecha, Tipo: r.tipo === "remoto" ? "Remoto" : "Presencial",
     "Hora inicio": r.hora_inicio, "Hora fin": r.hora_fin,
+    Equipo: r.equipos ? (r.equipos.nombre_red || r.equipos.responsable || r.equipos.tipo_equipo) : "",
     "Usuario/Área": r.usuario_area, Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
     Recomendaciones: r.recomendaciones, "Pendiente por pagar": r.monto_pendiente,
+    Pagado: r.monto_pendiente ? (r.pagado ? "Sí" : "No") : "",
   }));
   exportarExcel(filas, `Reportes - ${nombreEmpresa}.xlsx`, "Reportes");
 });
