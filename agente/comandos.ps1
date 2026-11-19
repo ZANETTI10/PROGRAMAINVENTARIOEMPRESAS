@@ -26,6 +26,12 @@
 # Programada corre como SYSTEM (igual que reportar.ps1), que ya tiene
 # permisos de sobra para las cuatro acciones. El "token" de este
 # archivo identifica el equipo/empresa, no da acceso a nada mas.
+#
+# Tambien revisa (una sola vez por equipo) si hace falta instalar
+# preguntar-responsable.ps1 y su Tarea Programada -- la que pregunta
+# de vez en cuando, en una ventanita, si sigue siendo la misma persona
+# la que usa el equipo. Asi los equipos que ya estaban instalados
+# antes de que existiera esto lo reciben solos, sin reinstalar nada.
 # ============================================================
 
 $ErrorActionPreference = "Continue"
@@ -87,6 +93,42 @@ function Actualizar-ArchivoSiCambio($url, $rutaLocal, $nombre) {
 $rutaPropia = if ($PSCommandPath) { $PSCommandPath } else { $comandosPath }
 $seActualizoComandos = Actualizar-ArchivoSiCambio $comandosUrl $rutaPropia "comandos.ps1"
 Actualizar-ArchivoSiCambio $reportarUrl $reportarPath "reportar.ps1" | Out-Null
+
+$preguntarUrl = "https://zanetti10.github.io/PROGRAMAINVENTARIOEMPRESAS/agente/preguntar-responsable.ps1"
+$preguntarPath = Join-Path $dir "preguntar-responsable.ps1"
+Actualizar-ArchivoSiCambio $preguntarUrl $preguntarPath "preguntar-responsable.ps1" | Out-Null
+
+# ---- Permisos y tarea para poder preguntar (en la sesion del usuario,
+# no como SYSTEM) quien usa el equipo: responsable.txt lo crea el
+# instalador como Administrador, asi que hay que darle permiso de
+# escritura a los usuarios normales sobre la carpeta para que puedan
+# confirmarlo o cambiarlo sin pedir privilegios de administrador. Se
+# hace una sola vez por equipo -- los equipos instalados antes de que
+# existiera esto lo reciben aqui, sin tener que reinstalar nada. ----
+$permisosMarcador = Join-Path $dir "permisos_responsable_ok.txt"
+if (-not (Test-Path $permisosMarcador)) {
+  try {
+    icacls "$dir" /grant "*S-1-5-32-545:(OI)(CI)M" /T /Q | Out-Null
+    Set-Content -Path $permisosMarcador -Value (Get-Date -Format "yyyy-MM-dd") -Encoding ascii
+    Log "Permisos de la carpeta ajustados para poder preguntar el responsable."
+  } catch {
+    Log "No se pudieron ajustar los permisos para preguntar el responsable: $($_.Exception.Message)"
+  }
+}
+
+try {
+  $tareaResponsable = Get-ScheduledTask -TaskName "HelpdeskTI-Responsable" -ErrorAction SilentlyContinue
+  if (-not $tareaResponsable -and (Test-Path $preguntarPath)) {
+    $principalGrupo = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -LogonType Group
+    $accionResponsable = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$preguntarPath`""
+    $disparadorResponsable = New-ScheduledTaskTrigger -AtLogOn
+    $configResponsable = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName "HelpdeskTI-Responsable" -Action $accionResponsable -Trigger $disparadorResponsable -Principal $principalGrupo -Settings $configResponsable -Description "Helpdesk TI: pregunta de vez en cuando (en una ventanita, no en consola) si sigue siendo la misma persona la que usa este equipo." -Force | Out-Null
+    Log "Tarea HelpdeskTI-Responsable creada."
+  }
+} catch {
+  Log "No se pudo crear la tarea HelpdeskTI-Responsable: $($_.Exception.Message)"
+}
 
 if ($seActualizoComandos) {
   # Relanza la version ya actualizada de inmediato (para no esperar a
