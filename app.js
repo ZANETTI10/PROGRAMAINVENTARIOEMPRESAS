@@ -77,6 +77,8 @@ async function entrarApp(session) {
   cancelarEdicionReporte();
   cargarReportesPorDia();
   cargarEquiposRevision();
+  cargarPendientes();
+  cargarRecordatorios();
 }
 
 function usuarioAEmail(valor) {
@@ -788,6 +790,12 @@ async function cargarEmpresas() {
   $("credEmpresaSelect").innerHTML = opciones;
   $("monEmpresaSelect").innerHTML = opciones;
   $("repEmpresaSelect").innerHTML = opciones;
+
+  const opcionesPend = empresas.map((e) => `<option value="${e.id}">${escapeHtml(e.nombre)}</option>`).join("");
+  $("pendEmpresa").innerHTML = `<option value="">General (sin empresa)</option>` + opcionesPend;
+  const filtroPendAnterior = $("pendFiltroEmpresa").value || "todas";
+  $("pendFiltroEmpresa").innerHTML = `<option value="todas">Todas las empresas</option><option value="general">General (sin empresa)</option>` + opcionesPend;
+  $("pendFiltroEmpresa").value = filtroPendAnterior;
 
   $("empresaFormCard").style.display = perfil.rol === "admin" ? "block" : "none";
 }
@@ -3378,6 +3386,262 @@ async function cargarPersonal() {
       await cargarPersonal();
     });
   });
+}
+
+// ------------------------------------------------------------
+// Pendientes (tareas generales o de una empresa en particular, con
+// fecha límite) y Recordatorios/tips (lo que se le recuerda a quien
+// esté en campo al registrar un reporte, o el "tip del día" del
+// Dashboard). Cualquiera puede ver y marcar pendientes como hechos;
+// solo el admin crea/edita/borra recordatorios (los pendientes los
+// puede borrar también solo el admin, para que no se pierdan por error).
+// ------------------------------------------------------------
+
+let pendientes = [];
+let pendienteEditandoId = null;
+let recordatorios = [];
+let recordatorioEditandoId = null;
+
+async function cargarPendientes() {
+  const { data, error } = await sb
+    .from("pendientes")
+    .select("*, empresas(nombre)")
+    .order("hecho")
+    .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
+  if (error) { toast("No se pudo cargar pendientes: " + error.message, true); return; }
+  pendientes = data || [];
+  renderPendientes();
+}
+
+function renderPendientes() {
+  const filtroEmpresa = $("pendFiltroEmpresa").value || "todas";
+  const filtroEstado = $("pendFiltroEstado").value || "pendientes";
+
+  const lista = pendientes.filter((p) => {
+    if (filtroEmpresa === "general" && p.empresa_id) return false;
+    if (filtroEmpresa !== "todas" && filtroEmpresa !== "general" && p.empresa_id !== filtroEmpresa) return false;
+    if (filtroEstado === "pendientes" && p.hecho) return false;
+    if (filtroEstado === "completados" && !p.hecho) return false;
+    return true;
+  });
+
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const tbody = $("tablaPendientes");
+  tbody.innerHTML = "";
+  lista.forEach((p) => {
+    let fechaHtml = '<span class="sub">Sin fecha</span>';
+    if (p.fecha_vencimiento) {
+      const f = new Date(p.fecha_vencimiento + "T00:00:00");
+      const dias = Math.round((f - hoy) / 86400000);
+      let clase = "pill";
+      let texto = f.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric" });
+      if (!p.hecho && dias < 0) { clase = "pill pill-bad"; texto += " (vencido)"; }
+      else if (!p.hecho && dias === 0) { clase = "pill pill-warn"; texto += " (hoy)"; }
+      fechaHtml = `<span class="${clase}">${texto}</span>`;
+    }
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="checkbox" data-toggle-pendiente="${p.id}" ${p.hecho ? "checked" : ""} /></td>
+      <td style="${p.hecho ? "text-decoration:line-through; color:var(--text-faint);" : ""}">${escapeHtml(p.titulo)}${p.descripcion ? `<br><span class="sub">${escapeHtml(p.descripcion)}</span>` : ""}</td>
+      <td>${p.empresa_id ? escapeHtml(p.empresas?.nombre || "") : '<span class="sub">General</span>'}</td>
+      <td>${fechaHtml}</td>
+      <td class="actions-cell">
+        <button class="icon-btn" data-editar-pendiente="${p.id}">Editar</button>
+        ${perfil.rol === "admin" ? `<button class="icon-btn danger" data-borrar-pendiente="${p.id}">Borrar</button>` : ""}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  $("pendientesEmpty").style.display = lista.length ? "none" : "block";
+
+  document.querySelectorAll("[data-toggle-pendiente]").forEach((chk) => {
+    chk.addEventListener("change", () => togglePendiente(chk.dataset.togglePendiente, chk.checked));
+  });
+  document.querySelectorAll("[data-editar-pendiente]").forEach((b) => {
+    b.addEventListener("click", () => editarPendiente(b.dataset.editarPendiente));
+  });
+  document.querySelectorAll("[data-borrar-pendiente]").forEach((b) => {
+    b.addEventListener("click", () => borrarPendiente(b.dataset.borrarPendiente));
+  });
+
+  // Punto rojo en el menú si hay algún pendiente vencido (en cualquier filtro).
+  const hayVencidos = pendientes.some((p) => !p.hecho && p.fecha_vencimiento && new Date(p.fecha_vencimiento + "T00:00:00") < hoy);
+  $("navPendientesAlerta").style.display = hayVencidos ? "inline-block" : "none";
+}
+
+$("pendFiltroEmpresa").addEventListener("change", renderPendientes);
+$("pendFiltroEstado").addEventListener("change", renderPendientes);
+
+async function togglePendiente(id, hecho) {
+  const { error } = await sb.from("pendientes").update({ hecho, completado_en: hecho ? new Date().toISOString() : null }).eq("id", id);
+  if (error) { toast("No se pudo actualizar: " + error.message, true); return; }
+  await cargarPendientes();
+}
+
+function editarPendiente(id) {
+  const p = pendientes.find((x) => x.id === id);
+  if (!p) return;
+  pendienteEditandoId = id;
+  $("pendTitulo").value = p.titulo || "";
+  $("pendDescripcion").value = p.descripcion || "";
+  $("pendEmpresa").value = p.empresa_id || "";
+  $("pendFecha").value = p.fecha_vencimiento || "";
+  $("pendFormTitulo").textContent = "Editar pendiente";
+  $("btnGuardarPendiente").textContent = "Guardar cambios";
+  $("btnCancelarEdicionPendiente").style.display = "inline-block";
+  $("pendTitulo").focus();
+}
+
+function cancelarEdicionPendiente() {
+  pendienteEditandoId = null;
+  $("pendTitulo").value = "";
+  $("pendDescripcion").value = "";
+  $("pendEmpresa").value = "";
+  $("pendFecha").value = "";
+  $("pendFormTitulo").textContent = "Nuevo pendiente";
+  $("btnGuardarPendiente").textContent = "Guardar pendiente";
+  $("btnCancelarEdicionPendiente").style.display = "none";
+  $("pendienteError").textContent = "";
+}
+$("btnCancelarEdicionPendiente").addEventListener("click", cancelarEdicionPendiente);
+
+$("btnGuardarPendiente").addEventListener("click", async () => {
+  const titulo = $("pendTitulo").value.trim();
+  if (!titulo) { $("pendienteError").textContent = "Escribe un título."; return; }
+  const registro = {
+    titulo,
+    descripcion: $("pendDescripcion").value.trim() || null,
+    empresa_id: $("pendEmpresa").value || null,
+    fecha_vencimiento: $("pendFecha").value || null,
+  };
+  $("pendienteError").textContent = "";
+  const query = pendienteEditandoId
+    ? sb.from("pendientes").update(registro).eq("id", pendienteEditandoId)
+    : sb.from("pendientes").insert(registro);
+  const { error } = await query;
+  if (error) { $("pendienteError").textContent = error.message; return; }
+  toast(pendienteEditandoId ? "Pendiente actualizado." : "Pendiente creado.");
+  cancelarEdicionPendiente();
+  await cargarPendientes();
+});
+
+async function borrarPendiente(id) {
+  if (!confirm("¿Borrar este pendiente?")) return;
+  const { error } = await sb.from("pendientes").delete().eq("id", id);
+  if (error) { toast("No se pudo borrar: " + error.message, true); return; }
+  toast("Pendiente borrado.");
+  await cargarPendientes();
+}
+
+// ---- Recordatorios y tips ----
+
+async function cargarRecordatorios() {
+  const { data, error } = await sb.from("recordatorios").select("*").order("orden").order("creado_en");
+  if (error) { toast("No se pudo cargar recordatorios: " + error.message, true); return; }
+  recordatorios = data || [];
+  renderRecordatorios();
+  renderTipDiario();
+  renderRecordatorioRevision();
+}
+
+function renderRecordatorios() {
+  $("recordatorioFormCard").style.display = perfil.rol === "admin" ? "block" : "none";
+  const tbody = $("tablaRecordatorios");
+  tbody.innerHTML = "";
+  recordatorios.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(r.texto)}</td>
+      <td><span class="sub">${r.tipo === "tip_diario" ? "Tip del día" : "Al registrar un reporte"}</span></td>
+      <td>${r.activo ? '<span class="pill pill-ok">Activo</span>' : '<span class="pill">Inactivo</span>'}</td>
+      <td class="actions-cell">
+        ${perfil.rol === "admin" ? `<button class="icon-btn" data-editar-recordatorio="${r.id}">Editar</button><button class="icon-btn danger" data-borrar-recordatorio="${r.id}">Borrar</button>` : ""}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  $("recordatoriosEmpty").style.display = recordatorios.length ? "none" : "block";
+
+  document.querySelectorAll("[data-editar-recordatorio]").forEach((b) => {
+    b.addEventListener("click", () => editarRecordatorio(b.dataset.editarRecordatorio));
+  });
+  document.querySelectorAll("[data-borrar-recordatorio]").forEach((b) => {
+    b.addEventListener("click", () => borrarRecordatorio(b.dataset.borrarRecordatorio));
+  });
+}
+
+function editarRecordatorio(id) {
+  const r = recordatorios.find((x) => x.id === id);
+  if (!r) return;
+  recordatorioEditandoId = id;
+  $("recTexto").value = r.texto || "";
+  $("recTipo").value = r.tipo || "revision_equipo";
+  $("recActivo").checked = !!r.activo;
+  $("recFormTitulo").textContent = "Editar recordatorio";
+  $("btnGuardarRecordatorio").textContent = "Guardar cambios";
+  $("btnCancelarEdicionRecordatorio").style.display = "inline-block";
+  $("recTexto").focus();
+}
+
+function cancelarEdicionRecordatorio() {
+  recordatorioEditandoId = null;
+  $("recTexto").value = "";
+  $("recTipo").value = "revision_equipo";
+  $("recActivo").checked = true;
+  $("recFormTitulo").textContent = "Nuevo recordatorio";
+  $("btnGuardarRecordatorio").textContent = "Guardar recordatorio";
+  $("btnCancelarEdicionRecordatorio").style.display = "none";
+  $("recordatorioError").textContent = "";
+}
+$("btnCancelarEdicionRecordatorio").addEventListener("click", cancelarEdicionRecordatorio);
+
+$("btnGuardarRecordatorio").addEventListener("click", async () => {
+  const texto = $("recTexto").value.trim();
+  if (!texto) { $("recordatorioError").textContent = "Escribe el texto del recordatorio."; return; }
+  const registro = {
+    texto,
+    tipo: $("recTipo").value,
+    activo: $("recActivo").checked,
+  };
+  $("recordatorioError").textContent = "";
+  const query = recordatorioEditandoId
+    ? sb.from("recordatorios").update(registro).eq("id", recordatorioEditandoId)
+    : sb.from("recordatorios").insert(registro);
+  const { error } = await query;
+  if (error) { $("recordatorioError").textContent = error.message; return; }
+  toast(recordatorioEditandoId ? "Recordatorio actualizado." : "Recordatorio creado.");
+  cancelarEdicionRecordatorio();
+  await cargarRecordatorios();
+});
+
+async function borrarRecordatorio(id) {
+  if (!confirm("¿Borrar este recordatorio?")) return;
+  const { error } = await sb.from("recordatorios").delete().eq("id", id);
+  if (error) { toast("No se pudo borrar: " + error.message, true); return; }
+  toast("Recordatorio borrado.");
+  await cargarRecordatorios();
+}
+
+// Tip del día: uno distinto cada día (rotando por el día del año), para
+// que no sea siempre el mismo sin tener que guardar quién ya lo vio.
+function renderTipDiario() {
+  const caja = $("dashTipDiario");
+  if (!caja) return;
+  const activos = recordatorios.filter((r) => r.tipo === "tip_diario" && r.activo);
+  if (!activos.length) { caja.style.display = "none"; return; }
+  const diaDelAnio = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  const tip = activos[diaDelAnio % activos.length];
+  caja.querySelector("[data-tip-texto]").textContent = tip.texto;
+  caja.style.display = "flex";
+}
+
+// Recordatorios que aparecen al registrar un reporte (ej. "revisar la
+// copia de OneDrive"), para que a quien esté en campo no se le olvide.
+function renderRecordatorioRevision() {
+  const caja = $("recordatorioRevisionBox");
+  if (!caja) return;
+  const activos = recordatorios.filter((r) => r.tipo === "revision_equipo" && r.activo);
+  if (!activos.length) { caja.style.display = "none"; return; }
+  caja.querySelector("[data-tip-lista]").innerHTML = activos.map((r) => `<li>${escapeHtml(r.texto)}</li>`).join("");
+  caja.style.display = "block";
 }
 
 // ------------------------------------------------------------

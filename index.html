@@ -783,6 +783,11 @@ body.ficha-abierta { overflow: hidden; }
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 13h6M9 16.5h6M9 9.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <span>Reportes</span>
       </button>
+      <button class="nav-btn" data-view="pendientes" id="navPendientes">
+        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Pendientes</span>
+        <span class="nav-alert-dot" id="navPendientesAlerta" style="display:none;" title="Hay pendientes vencidos"></span>
+      </button>
       <button class="nav-btn" data-view="equipo" id="navEquipo" style="display:none;">
         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="17.5" cy="8.5" r="2.3" stroke="currentColor" stroke-width="1.6"/><path d="M15.8 14.3c2.6.3 4.7 2.2 4.7 5.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
         <span>Equipo</span>
@@ -812,6 +817,10 @@ body.ficha-abierta { overflow: hidden; }
           <h1>Dashboard</h1>
           <p class="sub">Estado general de todas las empresas de un vistazo — de aquí ves rápido qué toca revisar.</p>
         </div>
+      </div>
+
+      <div class="card" id="dashTipDiario" style="display:none; margin-bottom:16px;">
+        <p class="sub" style="margin:0; display:flex; align-items:center; gap:8px; color:var(--text);"><strong style="color:var(--accent);">Tip del día:</strong> <span data-tip-texto></span></p>
       </div>
 
       <div class="toolbar">
@@ -1274,6 +1283,11 @@ body.ficha-abierta { overflow: hidden; }
         <button class="btn-secondary" id="btnExportarReportes">Exportar a Excel</button>
       </div>
 
+      <div class="card" id="recordatorioRevisionBox" style="display:none;">
+        <h3 style="margin:0 0 8px;">Antes de guardar, recuerda</h3>
+        <ul data-tip-lista style="margin:0; padding-left:20px; color:var(--text-dim);"></ul>
+      </div>
+
       <div class="card">
         <h3 id="repFormTitulo">Nuevo reporte</h3>
         <div class="form-grid">
@@ -1315,6 +1329,88 @@ body.ficha-abierta { overflow: hidden; }
           </table>
         </div>
         <div class="empty-state" id="reportesEmpty" style="display:none;">Selecciona una empresa arriba.</div>
+      </div>
+    </section>
+
+    <!-- ---------- Vista: Pendientes ---------- -->
+    <section class="view" id="view-pendientes">
+      <div class="view-head">
+        <div class="view-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div>
+          <h1>Pendientes</h1>
+          <p class="sub">Tareas por hacer, generales o de una empresa en particular — con fecha límite para no perderlas de vista.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 id="pendFormTitulo">Nuevo pendiente</h3>
+        <div class="form-grid">
+          <div class="full"><label for="pendTitulo">Título</label><input id="pendTitulo" placeholder="Ej: Renovar licencia de antivirus" /></div>
+          <div><label for="pendEmpresa">Empresa</label><select id="pendEmpresa"><option value="">General (sin empresa)</option></select></div>
+          <div><label for="pendFecha">Fecha límite (opcional)</label><input type="date" id="pendFecha" /></div>
+          <div class="full"><label for="pendDescripcion">Notas (opcional)</label><textarea id="pendDescripcion" rows="2"></textarea></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarPendiente">Guardar pendiente</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionPendiente" type="button">Cancelar</button>
+        </div>
+        <div class="error-msg" id="pendienteError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Lista de pendientes</h3>
+        <div class="toolbar" style="margin-bottom:14px;">
+          <div class="field">
+            <label for="pendFiltroEmpresa">Empresa</label>
+            <select id="pendFiltroEmpresa"><option value="todas">Todas las empresas</option><option value="general">General (sin empresa)</option></select>
+          </div>
+          <div class="field">
+            <label for="pendFiltroEstado">Mostrar</label>
+            <select id="pendFiltroEstado">
+              <option value="pendientes">Pendientes</option>
+              <option value="todos">Todos</option>
+              <option value="completados">Completados</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th></th><th>Título</th><th>Empresa</th><th>Fecha límite</th><th></th></tr></thead>
+            <tbody id="tablaPendientes"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="pendientesEmpty" style="display:none;">No hay pendientes para este filtro.</div>
+      </div>
+
+      <div class="card" id="recordatorioFormCard">
+        <h3 id="recFormTitulo">Nuevo recordatorio</h3>
+        <p class="sub" style="margin:0 0 12px;">Se muestra al registrar un reporte (ej. "revisar la copia de OneDrive"), o como "Tip del día" en el Dashboard.</p>
+        <div class="form-grid">
+          <div class="full"><label for="recTexto">Texto</label><input id="recTexto" placeholder="Ej: Revisar la copia de seguridad en OneDrive del equipo" /></div>
+          <div><label for="recTipo">Dónde aparece</label>
+            <select id="recTipo">
+              <option value="revision_equipo">Al registrar un reporte</option>
+              <option value="tip_diario">Tip del día (Dashboard)</option>
+            </select>
+          </div>
+          <div><label for="recActivo" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:28px;"><input type="checkbox" id="recActivo" checked style="width:auto; margin:0;" /> Activo</label></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button class="btn-primary" style="width:auto; margin-top:0;" id="btnGuardarRecordatorio">Guardar recordatorio</button>
+          <button class="btn-secondary" style="width:auto; margin-top:0; display:none;" id="btnCancelarEdicionRecordatorio" type="button">Cancelar</button>
+        </div>
+        <div class="error-msg" id="recordatorioError"></div>
+      </div>
+
+      <div class="card">
+        <h3>Recordatorios y tips configurados</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Texto</th><th>Dónde aparece</th><th>Activo</th><th></th></tr></thead>
+            <tbody id="tablaRecordatorios"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="recordatoriosEmpty" style="display:none;">No hay recordatorios configurados.</div>
       </div>
     </section>
 
