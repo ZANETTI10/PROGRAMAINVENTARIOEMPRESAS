@@ -1791,6 +1791,32 @@ async function cargarEquiposParaReporte(empresaId) {
     .join("");
 }
 
+// Pendientes que se pueden vincular a un reporte: los de esta empresa y
+// los "generales" (sin empresa). Se incluyen tambien los ya hechos (se
+// marcan como "(hecho)") para que, al editar un reporte viejo, el que
+// tenia elegido siga apareciendo en la lista.
+async function cargarPendientesParaReporte(empresaId) {
+  const sel = $("repPendiente");
+  if (!sel) return;
+  if (!empresaId) { sel.innerHTML = `<option value="">Ninguno</option>`; return; }
+  const { data, error } = await sb
+    .from("pendientes")
+    .select("id, titulo, hecho")
+    .or(`empresa_id.eq.${empresaId},empresa_id.is.null`)
+    .order("hecho")
+    .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
+  if (error) { console.error(error); return; }
+  sel.innerHTML = `<option value="">Ninguno</option>` + (data || [])
+    .map((p) => `<option value="${p.id}">${p.hecho ? "(hecho) " : ""}${escapeHtml(p.titulo)}</option>`)
+    .join("");
+}
+
+function actualizarVisibilidadMarcarPendiente() {
+  const mostrar = !!$("repPendiente")?.value;
+  document.querySelectorAll(".campo-pendiente-marcar").forEach((el) => { el.style.display = mostrar ? "" : "none"; });
+}
+$("repPendiente").addEventListener("change", actualizarVisibilidadMarcarPendiente);
+
 function esEmpresaContratoFijo(empresaId) {
   return !!empresas.find((e) => e.id === empresaId)?.contrato_fijo;
 }
@@ -1807,6 +1833,7 @@ $("repEmpresaSelect").addEventListener("change", async (e) => {
   sincronizarEmpresaGlobal(empresaRepActual);
   actualizarVisibilidadPendientePago();
   await cargarEquiposParaReporte(empresaRepActual);
+  await cargarPendientesParaReporte(empresaRepActual);
   await cargarReportes();
 });
 
@@ -1822,9 +1849,13 @@ $("btnGuardarReporte").addEventListener("click", async () => {
   if (!tecnico) { $("reporteError").textContent = "Indica qué técnico atendió el caso."; return; }
   if (!descripcion) { $("reporteError").textContent = "Describe qué se hizo o qué se encontró."; return; }
 
+  const pendienteVinculado = $("repPendiente").value || null;
+  const marcarPendienteHecho = $("repMarcarPendienteHecho").checked;
+
   const registro = {
     empresa_id: empresaRepActual,
     equipo_id: $("repEquipo").value || null,
+    pendiente_id: pendienteVinculado,
     fecha,
     tipo: $("repTipo").value,
     hora_inicio: horaInicio,
@@ -1866,10 +1897,14 @@ $("btnGuardarReporte").addEventListener("click", async () => {
     if (error) { $("reporteError").textContent = "Error al guardar: " + error.message; return; }
 
     toast(reporteEditandoId ? "Reporte actualizado." : "Reporte guardado.");
+    if (pendienteVinculado && marcarPendienteHecho) {
+      await sb.from("pendientes").update({ hecho: true, completado_en: new Date().toISOString() }).eq("id", pendienteVinculado);
+    }
     cancelarEdicionReporte();
     await cargarReportes();
     await cargarReportesPorDia();
     await cargarEquiposRevision();
+    await cargarPendientes();
   } finally {
     botonGuardar.disabled = false;
     botonGuardar.textContent = textoBotonOriginal;
@@ -1884,6 +1919,8 @@ function cancelarEdicionReporte() {
   $("repHoraFin").value = "";
   $("repTecnico").value = perfil?.nombre || emailAUsuario(sesion?.user?.email) || "";
   $("repEquipo").value = "";
+  $("repPendiente").value = "";
+  actualizarVisibilidadMarcarPendiente();
   $("repUsuarioArea").value = "";
   $("repMontoPendiente").value = "";
   $("repDescripcion").value = "";
@@ -1906,7 +1943,7 @@ async function cargarReportes() {
   if (!empresaRepActual) { $("reportesEmpty").style.display = "block"; $("reportesEmpty").textContent = "Selecciona una empresa arriba."; return; }
 
   const { data, error } = await sb
-    .from("reportes_trabajo").select("*, equipos(nombre_red, tipo_equipo, responsable)")
+    .from("reportes_trabajo").select("*, equipos(nombre_red, tipo_equipo, responsable), pendientes(titulo)")
     .eq("empresa_id", empresaRepActual)
     .order("fecha", { ascending: false })
     .order("hora_inicio", { ascending: false });
@@ -1920,12 +1957,13 @@ async function cargarReportes() {
     const horario = r.hora_inicio ? r.hora_inicio.slice(0, 5) + (r.hora_fin ? " – " + r.hora_fin.slice(0, 5) : "") : "—";
     const tr = document.createElement("tr");
     const nombreEquipo = r.equipos ? (r.equipos.nombre_red || r.equipos.responsable || r.equipos.tipo_equipo) : null;
+    const tareaVinculada = r.pendientes?.titulo || null;
     const fotos = Array.isArray(r.fotos) ? r.fotos : [];
     tr.innerHTML = `
       <td>${fmtFechaCorta(r.fecha)}</td>
       <td><span class="pill">${r.tipo === "remoto" ? "Remoto" : "Presencial"}</span></td>
       <td>${horario}</td>
-      <td>${escapeHtml(nombreEquipo || "—")}</td>
+      <td>${escapeHtml(nombreEquipo || "—")}${tareaVinculada ? `<br><span class="sub">Tarea: ${escapeHtml(tareaVinculada)}</span>` : ""}</td>
       <td>${escapeHtml(r.usuario_area || "—")}</td>
       <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
       <td>${escapeHtml(r.descripcion)}</td>
@@ -1954,6 +1992,9 @@ async function cargarReportes() {
       $("repTecnico").value = r.tecnico_nombre || "";
       await cargarEquiposParaReporte(empresaRepActual);
       $("repEquipo").value = r.equipo_id || "";
+      await cargarPendientesParaReporte(empresaRepActual);
+      $("repPendiente").value = r.pendiente_id || "";
+      actualizarVisibilidadMarcarPendiente();
       $("repUsuarioArea").value = r.usuario_area || "";
       $("repDescripcion").value = r.descripcion || "";
       $("repSolucion").value = r.solucion || "";
@@ -2105,6 +2146,7 @@ async function cargarEquiposRevision() {
       empresaRepActual = empresaId;
       sincronizarEmpresaGlobal(empresaRepActual);
       await cargarEquiposParaReporte(empresaRepActual);
+      await cargarPendientesParaReporte(empresaRepActual);
       cancelarEdicionReporte();
       actualizarVisibilidadPendientePago();
       $("repEquipo").value = equipoId;
@@ -3410,6 +3452,10 @@ async function cargarPendientes() {
     .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
   if (error) { toast("No se pudo cargar pendientes: " + error.message, true); return; }
   pendientes = data || [];
+  const { data: vinculos } = await sb.from("reportes_trabajo").select("pendiente_id").not("pendiente_id", "is", null);
+  const conteoVinculos = {};
+  (vinculos || []).forEach((v) => { conteoVinculos[v.pendiente_id] = (conteoVinculos[v.pendiente_id] || 0) + 1; });
+  pendientes.forEach((p) => { p._reportes = conteoVinculos[p.id] || 0; });
   renderPendientes();
 }
 
@@ -3442,7 +3488,7 @@ function renderPendientes() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="checkbox" data-toggle-pendiente="${p.id}" ${p.hecho ? "checked" : ""} /></td>
-      <td style="${p.hecho ? "text-decoration:line-through; color:var(--text-faint);" : ""}">${escapeHtml(p.titulo)}${p.descripcion ? `<br><span class="sub">${escapeHtml(p.descripcion)}</span>` : ""}</td>
+      <td style="${p.hecho ? "text-decoration:line-through; color:var(--text-faint);" : ""}">${escapeHtml(p.titulo)}${p.descripcion ? `<br><span class="sub">${escapeHtml(p.descripcion)}</span>` : ""}${p._reportes ? `<br><span class="sub">📄 vinculado a ${p._reportes} reporte${p._reportes > 1 ? "s" : ""}</span>` : ""}</td>
       <td>${p.empresa_id ? escapeHtml(p.empresas?.nombre || "") : '<span class="sub">General</span>'}</td>
       <td>${fechaHtml}</td>
       <td class="actions-cell">

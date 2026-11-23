@@ -1302,6 +1302,8 @@ body.ficha-abierta { overflow: hidden; }
           <div><label for="repHoraFin">Hora fin</label><input type="time" id="repHoraFin" /></div>
           <div><label for="repTecnico">Técnico que atendió</label><input id="repTecnico" list="repTecnicoLista" placeholder="Nombre del técnico" /><datalist id="repTecnicoLista"></datalist></div>
           <div><label for="repEquipo">Equipo (opcional)</label><select id="repEquipo"><option value="">Sin equipo específico</option></select></div>
+          <div><label for="repPendiente">Pendiente relacionado (opcional)</label><select id="repPendiente"><option value="">Ninguno</option></select></div>
+          <div class="campo-pendiente-marcar" style="display:none;"><label for="repMarcarPendienteHecho" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:28px;"><input type="checkbox" id="repMarcarPendienteHecho" checked style="width:auto; margin:0;" /> Marcar como hecho al guardar</label></div>
           <div><label for="repUsuarioArea">Usuario / Área</label><input id="repUsuarioArea" placeholder="Nombre de quien usa el equipo o área" /></div>
           <div class="campo-pendiente-pago" style="display:none;"><label for="repMontoPendiente">Pendiente por pagar</label><input type="number" id="repMontoPendiente" min="0" step="1000" placeholder="$ (déjalo vacío si no aplica)" /></div>
           <div class="full"><label for="repDescripcion">Descripción</label><textarea id="repDescripcion" rows="3" placeholder="Qué se hizo / qué se encontró"></textarea></div>
