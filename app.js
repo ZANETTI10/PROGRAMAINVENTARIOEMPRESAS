@@ -1851,16 +1851,26 @@ $("btnGuardarReporte").addEventListener("click", async () => {
 
   const pendienteVinculado = $("repPendiente").value || null;
   const marcarPendienteHecho = $("repMarcarPendienteHecho").checked;
+  const facturarPendiente = $("repPendienteFacturar")?.checked || false;
+  let pendienteIdFinal = pendienteVinculado;
+  if (facturarPendiente) {
+    const { data: nuevoPend, error: errPend } = await sb.from("pendientes")
+      .insert({ empresa_id: empresaRepActual, titulo: `Facturar visita del ${fecha}`, descripcion: `Técnico: ${tecnico}` })
+      .select("id").single();
+    if (errPend) { $("reporteError").textContent = "Error al crear el pendiente de facturación: " + errPend.message; return; }
+    pendienteIdFinal = nuevoPend.id;
+  }
 
   const registro = {
     empresa_id: empresaRepActual,
     equipo_id: $("repEquipo").value || null,
-    pendiente_id: pendienteVinculado,
+    pendiente_id: pendienteIdFinal,
     fecha,
     tipo: $("repTipo").value,
     hora_inicio: horaInicio,
     hora_fin: $("repHoraFin").value || null,
     usuario_area: $("repUsuarioArea").value.trim() || null,
+    numero_contacto: $("repNumeroContacto").value.trim() || null,
     descripcion,
     solucion: $("repSolucion").value.trim() || null,
     recomendaciones: $("repRecomendaciones").value.trim() || null,
@@ -1897,7 +1907,7 @@ $("btnGuardarReporte").addEventListener("click", async () => {
     if (error) { $("reporteError").textContent = "Error al guardar: " + error.message; return; }
 
     toast(reporteEditandoId ? "Reporte actualizado." : "Reporte guardado.");
-    if (pendienteVinculado && marcarPendienteHecho) {
+    if (!facturarPendiente && pendienteVinculado && marcarPendienteHecho) {
       await sb.from("pendientes").update({ hecho: true, completado_en: new Date().toISOString() }).eq("id", pendienteVinculado);
     }
     cancelarEdicionReporte();
@@ -1922,6 +1932,8 @@ function cancelarEdicionReporte() {
   $("repPendiente").value = "";
   actualizarVisibilidadMarcarPendiente();
   $("repUsuarioArea").value = "";
+  $("repNumeroContacto").value = "";
+  $("repPendienteFacturar").checked = false;
   $("repMontoPendiente").value = "";
   $("repDescripcion").value = "";
   $("repSolucion").value = "";
@@ -1952,6 +1964,7 @@ async function cargarReportes() {
 
   $("reportesEmpty").style.display = (data && data.length) ? "none" : "block";
   $("reportesEmpty").textContent = "Sin reportes para esta empresa todavía.";
+  const nombreEmpresaActual = empresas.find((e) => e.id === empresaRepActual)?.nombre || "—";
 
   (data || []).forEach((r) => {
     const horario = r.hora_inicio ? r.hora_inicio.slice(0, 5) + (r.hora_fin ? " – " + r.hora_fin.slice(0, 5) : "") : "—";
@@ -1963,8 +1976,9 @@ async function cargarReportes() {
       <td>${fmtFechaCorta(r.fecha)}</td>
       <td><span class="pill">${r.tipo === "remoto" ? "Remoto" : "Presencial"}</span></td>
       <td>${horario}</td>
+      <td>${escapeHtml(nombreEmpresaActual)}</td>
       <td>${escapeHtml(nombreEquipo || "—")}${tareaVinculada ? `<br><span class="sub">Tarea: ${escapeHtml(tareaVinculada)}</span>` : ""}</td>
-      <td>${escapeHtml(r.usuario_area || "—")}</td>
+      <td>${escapeHtml(r.usuario_area || "—")}${r.numero_contacto ? `<br><span class="sub">Tel: ${escapeHtml(r.numero_contacto)}</span>` : ""}</td>
       <td>${escapeHtml(r.tecnico_nombre || "—")}</td>
       <td>${escapeHtml(r.descripcion)}</td>
       <td>${escapeHtml(r.solucion || "—")}</td>
@@ -1996,6 +2010,8 @@ async function cargarReportes() {
       $("repPendiente").value = r.pendiente_id || "";
       actualizarVisibilidadMarcarPendiente();
       $("repUsuarioArea").value = r.usuario_area || "";
+      $("repNumeroContacto").value = r.numero_contacto || "";
+      $("repPendienteFacturar").checked = false;
       $("repDescripcion").value = r.descripcion || "";
       $("repSolucion").value = r.solucion || "";
       $("repRecomendaciones").value = r.recomendaciones || "";
@@ -2231,10 +2247,10 @@ $("btnExportarReportes").addEventListener("click", async () => {
   const nombreEmpresa = empresas.find((e) => e.id === empresaRepActual)?.nombre || "empresa";
 
   const filas = (data || []).map((r) => ({
-    Fecha: r.fecha, Tipo: r.tipo === "remoto" ? "Remoto" : "Presencial",
+    Fecha: r.fecha, Empresa: nombreEmpresa, Tipo: r.tipo === "remoto" ? "Remoto" : "Presencial",
     "Hora inicio": r.hora_inicio, "Hora fin": r.hora_fin,
     Equipo: r.equipos ? (r.equipos.nombre_red || r.equipos.responsable || r.equipos.tipo_equipo) : "",
-    "Usuario/Área": r.usuario_area, Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
+    "Usuario/Área": r.usuario_area, Contacto: r.numero_contacto, Técnico: r.tecnico_nombre, Descripción: r.descripcion, Solución: r.solucion,
     Recomendaciones: r.recomendaciones, "Pendiente por pagar": r.monto_pendiente,
     Pagado: r.monto_pendiente ? (r.pagado ? "Sí" : "No") : "",
   }));

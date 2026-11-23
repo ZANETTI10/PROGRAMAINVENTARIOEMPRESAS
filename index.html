@@ -1305,7 +1305,9 @@ body.ficha-abierta { overflow: hidden; }
           <div><label for="repPendiente">Pendiente relacionado (opcional)</label><select id="repPendiente"><option value="">Ninguno</option></select></div>
           <div class="campo-pendiente-marcar" style="display:none;"><label for="repMarcarPendienteHecho" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:28px;"><input type="checkbox" id="repMarcarPendienteHecho" checked style="width:auto; margin:0;" /> Marcar como hecho al guardar</label></div>
           <div><label for="repUsuarioArea">Usuario / Área</label><input id="repUsuarioArea" placeholder="Nombre de quien usa el equipo o área" /></div>
+          <div><label for="repNumeroContacto">Número con el que hablaron</label><input id="repNumeroContacto" type="tel" placeholder="Teléfono de contacto de la visita" /></div>
           <div class="campo-pendiente-pago" style="display:none;"><label for="repMontoPendiente">Pendiente por pagar</label><input type="number" id="repMontoPendiente" min="0" step="1000" placeholder="$ (déjalo vacío si no aplica)" /></div>
+          <div class="campo-pendiente-pago" style="display:none;"><label for="repPendienteFacturar" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:28px;"><input type="checkbox" id="repPendienteFacturar" style="width:auto; margin:0;" /> Pendiente por facturar</label></div>
           <div class="full"><label for="repDescripcion">Descripción</label><textarea id="repDescripcion" rows="3" placeholder="Qué se hizo / qué se encontró"></textarea></div>
           <div class="full"><label for="repSolucion">Solución</label><textarea id="repSolucion" rows="3" placeholder="Cómo quedó resuelto (o qué queda pendiente)"></textarea></div>
           <div class="full"><label for="repRecomendaciones">Recomendaciones para el cliente</label><textarea id="repRecomendaciones" rows="2" placeholder="Ej: renovar licencia, cambiar disco, agendar mantenimiento"></textarea></div>
@@ -1326,7 +1328,7 @@ body.ficha-abierta { overflow: hidden; }
         <h3>Reportes registrados</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Equipo</th><th>Usuario/Área</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th>Recomendaciones</th><th>Pendiente</th><th>Fotos</th><th></th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Horario</th><th>Empresa</th><th>Equipo</th><th>Usuario/Área</th><th>Técnico</th><th>Descripción</th><th>Solución</th><th>Recomendaciones</th><th>Pendiente</th><th>Fotos</th><th></th></tr></thead>
             <tbody id="tablaReportes"></tbody>
           </table>
         </div>
