@@ -715,6 +715,16 @@ body.ficha-abierta { overflow: hidden; }
   .ficha { box-shadow: none; margin: 0; padding: 0; max-width: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @page { margin: 14mm; }
 }
+
+/* -------- Pendientes: vista calendario -------- */
+.toggle-vista.active-toggle { border-color: var(--accent); color: var(--accent); }
+.cal-dias-semana { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; text-align: center; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-celda { min-height: 86px; border: 1px solid var(--border); border-radius: 8px; padding: 6px; font-size: 0.72rem; background: var(--bg-2); overflow: hidden; }
+.cal-celda.cal-vacia { border: none; background: transparent; }
+.cal-celda.cal-hoy { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cal-num { font-family: var(--font-mono); color: var(--text-dim); margin-bottom: 4px; }
+.cal-celda .pill { display: block; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -822,6 +832,8 @@ body.ficha-abierta { overflow: hidden; }
       <div class="card" id="dashTipDiario" style="display:none; margin-bottom:16px;">
         <p class="sub" style="margin:0; display:flex; align-items:center; gap:8px; color:var(--text);"><strong style="color:var(--accent);">Tip del día:</strong> <span data-tip-texto></span></p>
       </div>
+
+      <div class="dash-resumen" id="dashPendientesResumen" style="display:none; grid-template-columns:repeat(3, minmax(0,1fr)); cursor:pointer;" title="Ver Pendientes"></div>
 
       <div class="toolbar">
         <button class="btn-primary" style="width:auto; margin-top:0;" id="btnActualizarDashboard">Actualizar estado</button>
@@ -1351,6 +1363,24 @@ body.ficha-abierta { overflow: hidden; }
         <div class="form-grid">
           <div class="full"><label for="pendTitulo">Título</label><input id="pendTitulo" placeholder="Ej: Renovar licencia de antivirus" /></div>
           <div><label for="pendEmpresa">Empresa</label><select id="pendEmpresa"><option value="">General (sin empresa)</option></select></div>
+          <div><label for="pendEquipo">Equipo (opcional)</label><select id="pendEquipo"><option value="">Sin equipo específico</option></select></div>
+          <div><label for="pendPrioridad">Prioridad</label>
+            <select id="pendPrioridad">
+              <option value="alta">Alta</option>
+              <option value="media" selected>Media</option>
+              <option value="baja">Baja</option>
+            </select>
+          </div>
+          <div><label for="pendCategoria">Categoría</label>
+            <select id="pendCategoria">
+              <option value="facturacion">Facturación</option>
+              <option value="instalacion">Instalación</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="garantia">Garantía</option>
+              <option value="otro" selected>Otro</option>
+            </select>
+          </div>
+          <div><label for="pendAsignadoA">Asignado a (opcional)</label><input id="pendAsignadoA" list="repTecnicoLista" placeholder="Nombre del técnico" /></div>
           <div><label for="pendFecha">Fecha límite (opcional)</label><input type="date" id="pendFecha" /></div>
           <div class="full"><label for="pendDescripcion">Notas (opcional)</label><textarea id="pendDescripcion" rows="2"></textarea></div>
         </div>
@@ -1376,14 +1406,42 @@ body.ficha-abierta { overflow: hidden; }
               <option value="completados">Completados</option>
             </select>
           </div>
+          <div class="field">
+            <label for="pendFiltroCategoria">Categoría</label>
+            <select id="pendFiltroCategoria">
+              <option value="todas">Todas</option>
+              <option value="facturacion">Facturación</option>
+              <option value="instalacion">Instalación</option>
+              <option value="mantenimiento">Mantenimiento</option>
+              <option value="garantia">Garantía</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:6px;">
+            <button class="btn-secondary toggle-vista active-toggle" style="width:auto;" id="btnPendVistaLista" type="button">📋 Lista</button>
+            <button class="btn-secondary toggle-vista" style="width:auto;" id="btnPendVistaCalendario" type="button">📅 Calendario</button>
+          </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th></th><th>Título</th><th>Empresa</th><th>Fecha límite</th><th></th></tr></thead>
-            <tbody id="tablaPendientes"></tbody>
-          </table>
+        <div id="pendVistaListaWrap">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>Título</th><th>Empresa</th><th>Prioridad</th><th>Categoría</th><th>Asignado a</th><th>Fecha límite</th><th></th></tr></thead>
+              <tbody id="tablaPendientes"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="pendientesEmpty" style="display:none;">No hay pendientes para este filtro.</div>
         </div>
-        <div class="empty-state" id="pendientesEmpty" style="display:none;">No hay pendientes para este filtro.</div>
+        <div id="pendVistaCalendarioWrap" style="display:none;">
+          <div class="toolbar" style="margin-bottom:10px;">
+            <button class="icon-btn" id="pendCalAnterior" type="button">← Mes anterior</button>
+            <strong id="pendCalMesLabel" style="text-transform:capitalize;"></strong>
+            <button class="icon-btn" id="pendCalSiguiente" type="button">Mes siguiente →</button>
+          </div>
+          <div class="cal-dias-semana">
+            <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+          </div>
+          <div class="cal-grid" id="pendCalendarioGrid"></div>
+        </div>
       </div>
 
       <div class="card" id="recordatorioFormCard">

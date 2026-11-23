@@ -1855,7 +1855,7 @@ $("btnGuardarReporte").addEventListener("click", async () => {
   let pendienteIdFinal = pendienteVinculado;
   if (facturarPendiente) {
     const { data: nuevoPend, error: errPend } = await sb.from("pendientes")
-      .insert({ empresa_id: empresaRepActual, titulo: `Facturar visita del ${fecha}`, descripcion: `Técnico: ${tecnico}` })
+      .insert({ empresa_id: empresaRepActual, titulo: `Facturar visita del ${fecha}`, descripcion: `Técnico: ${tecnico}`, categoria: "facturacion", prioridad: "media" })
       .select("id").single();
     if (errPend) { $("reporteError").textContent = "Error al crear el pendiente de facturación: " + errPend.message; return; }
     pendienteIdFinal = nuevoPend.id;
@@ -3460,10 +3460,13 @@ let pendienteEditandoId = null;
 let recordatorios = [];
 let recordatorioEditandoId = null;
 
+const RANK_PRIORIDAD = { alta: 0, media: 1, baja: 2 };
+const CATEGORIAS_PENDIENTE = { facturacion: "Facturación", instalacion: "Instalación", mantenimiento: "Mantenimiento", garantia: "Garantía", otro: "Otro" };
+
 async function cargarPendientes() {
   const { data, error } = await sb
     .from("pendientes")
-    .select("*, empresas(nombre)")
+    .select("*, empresas(nombre), equipos(nombre_red, tipo_equipo, responsable)")
     .order("hecho")
     .order("fecha_vencimiento", { ascending: true, nullsFirst: false });
   if (error) { toast("No se pudo cargar pendientes: " + error.message, true); return; }
@@ -3472,18 +3475,51 @@ async function cargarPendientes() {
   const conteoVinculos = {};
   (vinculos || []).forEach((v) => { conteoVinculos[v.pendiente_id] = (conteoVinculos[v.pendiente_id] || 0) + 1; });
   pendientes.forEach((p) => { p._reportes = conteoVinculos[p.id] || 0; });
+  pendientes.sort((a, b) => {
+    if (a.hecho !== b.hecho) return a.hecho ? 1 : -1;
+    const rp = (RANK_PRIORIDAD[a.prioridad] ?? 1) - (RANK_PRIORIDAD[b.prioridad] ?? 1);
+    if (rp !== 0) return rp;
+    return (a.fecha_vencimiento || "9999-99-99").localeCompare(b.fecha_vencimiento || "9999-99-99");
+  });
   renderPendientes();
+  actualizarResumenPendientesDashboard();
+  if (pendVistaActual === "calendario") renderPendientesCalendario();
+}
+
+function actualizarResumenPendientesDashboard() {
+  const cont = $("dashPendientesResumen");
+  if (!cont) return;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const enSieteDias = new Date(hoy); enSieteDias.setDate(enSieteDias.getDate() + 7);
+  let vencidos = 0, proximos = 0, activos = 0;
+  pendientes.forEach((p) => {
+    if (p.hecho) return;
+    activos++;
+    if (p.fecha_vencimiento) {
+      const f = new Date(p.fecha_vencimiento + "T00:00:00");
+      if (f < hoy) vencidos++;
+      else if (f <= enSieteDias) proximos++;
+    }
+  });
+  cont.style.display = activos ? "grid" : "none";
+  cont.innerHTML = `
+    <div class="dash-resumen-item dr-bad"><div class="dr-icon">⛔</div><span class="dr-num">${vencidos}</span><span class="dr-label">Vencidos</span></div>
+    <div class="dash-resumen-item dr-warn"><div class="dr-icon">⚠️</div><span class="dr-num">${proximos}</span><span class="dr-label">Vencen en 7 días</span></div>
+    <div class="dash-resumen-item dr-muted"><div class="dr-icon">📝</div><span class="dr-num">${activos}</span><span class="dr-label">Pendientes activos</span></div>`;
+  cont.onclick = () => $("navPendientes").click();
 }
 
 function renderPendientes() {
   const filtroEmpresa = $("pendFiltroEmpresa").value || "todas";
   const filtroEstado = $("pendFiltroEstado").value || "pendientes";
+  const filtroCategoria = $("pendFiltroCategoria")?.value || "todas";
 
   const lista = pendientes.filter((p) => {
     if (filtroEmpresa === "general" && p.empresa_id) return false;
     if (filtroEmpresa !== "todas" && filtroEmpresa !== "general" && p.empresa_id !== filtroEmpresa) return false;
     if (filtroEstado === "pendientes" && p.hecho) return false;
     if (filtroEstado === "completados" && !p.hecho) return false;
+    if (filtroCategoria !== "todas" && p.categoria !== filtroCategoria) return false;
     return true;
   });
 
@@ -3501,11 +3537,16 @@ function renderPendientes() {
       else if (!p.hecho && dias === 0) { clase = "pill pill-warn"; texto += " (hoy)"; }
       fechaHtml = `<span class="${clase}">${texto}</span>`;
     }
+    const nombreEquipoPend = p.equipos ? (p.equipos.nombre_red || p.equipos.responsable || p.equipos.tipo_equipo) : null;
+    const claseP = p.prioridad === "alta" ? "pill pill-bad" : p.prioridad === "baja" ? "pill pill-ok" : "pill pill-warn";
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="checkbox" data-toggle-pendiente="${p.id}" ${p.hecho ? "checked" : ""} /></td>
-      <td style="${p.hecho ? "text-decoration:line-through; color:var(--text-faint);" : ""}">${escapeHtml(p.titulo)}${p.descripcion ? `<br><span class="sub">${escapeHtml(p.descripcion)}</span>` : ""}${p._reportes ? `<br><span class="sub">📄 vinculado a ${p._reportes} reporte${p._reportes > 1 ? "s" : ""}</span>` : ""}</td>
+      <td style="${p.hecho ? "text-decoration:line-through; color:var(--text-faint);" : ""}">${escapeHtml(p.titulo)}${p.descripcion ? `<br><span class="sub">${escapeHtml(p.descripcion)}</span>` : ""}${nombreEquipoPend ? `<br><span class="sub">💻 ${escapeHtml(nombreEquipoPend)}</span>` : ""}${p._reportes ? `<br><span class="sub">📄 vinculado a ${p._reportes} reporte${p._reportes > 1 ? "s" : ""}</span>` : ""}</td>
       <td>${p.empresa_id ? escapeHtml(p.empresas?.nombre || "") : '<span class="sub">General</span>'}</td>
+      <td><span class="${claseP}">${p.prioridad === "alta" ? "Alta" : p.prioridad === "baja" ? "Baja" : "Media"}</span></td>
+      <td>${escapeHtml(CATEGORIAS_PENDIENTE[p.categoria] || "Otro")}</td>
+      <td>${escapeHtml(p.asignado_a || "—")}</td>
       <td>${fechaHtml}</td>
       <td class="actions-cell">
         <button class="icon-btn" data-editar-pendiente="${p.id}">Editar</button>
@@ -3532,6 +3573,69 @@ function renderPendientes() {
 
 $("pendFiltroEmpresa").addEventListener("change", renderPendientes);
 $("pendFiltroEstado").addEventListener("change", renderPendientes);
+$("pendFiltroCategoria")?.addEventListener("change", renderPendientes);
+
+// ---- Pendientes: vista calendario ----
+let pendVistaActual = "lista";
+let pendCalFecha = new Date(); pendCalFecha.setDate(1);
+
+function cambiarVistaPendientes(vista) {
+  pendVistaActual = vista;
+  $("pendVistaListaWrap").style.display = vista === "lista" ? "" : "none";
+  $("pendVistaCalendarioWrap").style.display = vista === "calendario" ? "" : "none";
+  $("btnPendVistaLista").classList.toggle("active-toggle", vista === "lista");
+  $("btnPendVistaCalendario").classList.toggle("active-toggle", vista === "calendario");
+  if (vista === "calendario") renderPendientesCalendario();
+}
+$("btnPendVistaLista")?.addEventListener("click", () => cambiarVistaPendientes("lista"));
+$("btnPendVistaCalendario")?.addEventListener("click", () => cambiarVistaPendientes("calendario"));
+$("pendCalAnterior")?.addEventListener("click", () => { pendCalFecha.setMonth(pendCalFecha.getMonth() - 1); renderPendientesCalendario(); });
+$("pendCalSiguiente")?.addEventListener("click", () => { pendCalFecha.setMonth(pendCalFecha.getMonth() + 1); renderPendientesCalendario(); });
+
+function renderPendientesCalendario() {
+  const cont = $("pendCalendarioGrid");
+  if (!cont) return;
+  const anio = pendCalFecha.getFullYear();
+  const mes = pendCalFecha.getMonth();
+  $("pendCalMesLabel").textContent = pendCalFecha.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+
+  const primerDiaSemana = new Date(anio, mes, 1).getDay();
+  const diasEnMes = new Date(anio, mes + 1, 0).getDate();
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+  const porDia = new Map();
+  pendientes.forEach((p) => {
+    if (!p.fecha_vencimiento) return;
+    const [y, m, d] = p.fecha_vencimiento.split("-").map(Number);
+    if (y === anio && (m - 1) === mes) {
+      if (!porDia.has(d)) porDia.set(d, []);
+      porDia.get(d).push(p);
+    }
+  });
+
+  let celdas = "";
+  for (let i = 0; i < primerDiaSemana; i++) celdas += `<div class="cal-celda cal-vacia"></div>`;
+  for (let dia = 1; dia <= diasEnMes; dia++) {
+    const fechaCelda = new Date(anio, mes, dia); fechaCelda.setHours(0, 0, 0, 0);
+    const esHoy = fechaCelda.getTime() === hoy.getTime();
+    const items = porDia.get(dia) || [];
+    const pills = items.slice(0, 3).map((p) => {
+      const clase = p.hecho ? "pill" : (fechaCelda < hoy ? "pill pill-bad" : p.prioridad === "alta" ? "pill pill-warn" : "pill");
+      return `<div class="${clase}" data-cal-pendiente="${p.id}" title="${escapeAttr(p.titulo)}">${escapeHtml(p.titulo)}</div>`;
+    }).join("");
+    const extra = items.length > 3 ? `<span class="sub">+${items.length - 3} más</span>` : "";
+    celdas += `<div class="cal-celda${esHoy ? " cal-hoy" : ""}"><div class="cal-num">${dia}</div>${pills}${extra}</div>`;
+  }
+  cont.innerHTML = celdas;
+
+  cont.querySelectorAll("[data-cal-pendiente]").forEach((el) => {
+    el.addEventListener("click", () => {
+      cambiarVistaPendientes("lista");
+      editarPendiente(el.dataset.calPendiente);
+      window.scrollTo({ top: $("pendFormTitulo").offsetTop - 80, behavior: "smooth" });
+    });
+  });
+}
 
 async function togglePendiente(id, hecho) {
   const { error } = await sb.from("pendientes").update({ hecho, completado_en: hecho ? new Date().toISOString() : null }).eq("id", id);
@@ -3539,13 +3643,18 @@ async function togglePendiente(id, hecho) {
   await cargarPendientes();
 }
 
-function editarPendiente(id) {
+async function editarPendiente(id) {
   const p = pendientes.find((x) => x.id === id);
   if (!p) return;
   pendienteEditandoId = id;
   $("pendTitulo").value = p.titulo || "";
   $("pendDescripcion").value = p.descripcion || "";
   $("pendEmpresa").value = p.empresa_id || "";
+  await cargarEquiposParaPendiente(p.empresa_id || "");
+  $("pendEquipo").value = p.equipo_id || "";
+  $("pendPrioridad").value = p.prioridad || "media";
+  $("pendCategoria").value = p.categoria || "otro";
+  $("pendAsignadoA").value = p.asignado_a || "";
   $("pendFecha").value = p.fecha_vencimiento || "";
   $("pendFormTitulo").textContent = "Editar pendiente";
   $("btnGuardarPendiente").textContent = "Guardar cambios";
@@ -3558,12 +3667,33 @@ function cancelarEdicionPendiente() {
   $("pendTitulo").value = "";
   $("pendDescripcion").value = "";
   $("pendEmpresa").value = "";
+  cargarEquiposParaPendiente("");
+  $("pendPrioridad").value = "media";
+  $("pendCategoria").value = "otro";
+  $("pendAsignadoA").value = "";
   $("pendFecha").value = "";
   $("pendFormTitulo").textContent = "Nuevo pendiente";
   $("btnGuardarPendiente").textContent = "Guardar pendiente";
   $("btnCancelarEdicionPendiente").style.display = "none";
   $("pendienteError").textContent = "";
 }
+
+async function cargarEquiposParaPendiente(empresaId) {
+  const sel = $("pendEquipo");
+  if (!sel) return;
+  if (!empresaId) { sel.innerHTML = `<option value="">Sin equipo específico</option>`; return; }
+  const { data, error } = await sb
+    .from("equipos")
+    .select("id, nombre_red, tipo_equipo, responsable")
+    .eq("empresa_id", empresaId)
+    .eq("inactivo", false)
+    .order("nombre_red");
+  if (error) { console.error(error); return; }
+  sel.innerHTML = `<option value="">Sin equipo específico</option>` + (data || [])
+    .map((e) => `<option value="${e.id}">${escapeHtml(e.nombre_red || e.responsable || e.tipo_equipo || "Equipo")}</option>`)
+    .join("");
+}
+$("pendEmpresa").addEventListener("change", (e) => cargarEquiposParaPendiente(e.target.value || ""));
 $("btnCancelarEdicionPendiente").addEventListener("click", cancelarEdicionPendiente);
 
 $("btnGuardarPendiente").addEventListener("click", async () => {
@@ -3573,6 +3703,10 @@ $("btnGuardarPendiente").addEventListener("click", async () => {
     titulo,
     descripcion: $("pendDescripcion").value.trim() || null,
     empresa_id: $("pendEmpresa").value || null,
+    equipo_id: $("pendEquipo").value || null,
+    prioridad: $("pendPrioridad").value || "media",
+    categoria: $("pendCategoria").value || "otro",
+    asignado_a: $("pendAsignadoA").value.trim() || null,
     fecha_vencimiento: $("pendFecha").value || null,
   };
   $("pendienteError").textContent = "";
