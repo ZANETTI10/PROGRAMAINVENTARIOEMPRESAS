@@ -248,12 +248,20 @@ function Ejecutar-Instalacion($responsableTexto) {
     $disparadorCmd = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650)
     Register-ScheduledTask -TaskName "HelpdeskTI-Comandos" -Action $accionCmd -Trigger $disparadorCmd -Principal $principalSistema -Settings $config -Description "Helpdesk TI: revisa cada 15 min si hay una accion remota pendiente." -Force | Out-Null
 
-    Unregister-ScheduledTask -TaskName "HelpdeskTI-Responsable" -Confirm:$false -ErrorAction SilentlyContinue
-    $principalGrupo = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545"
-    $accionResp = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$preguntarPath`""
-    $disparadorResp = New-ScheduledTaskTrigger -AtLogOn
-    $configResp = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew
-    Register-ScheduledTask -TaskName "HelpdeskTI-Responsable" -Action $accionResp -Trigger $disparadorResp -Principal $principalGrupo -Settings $configResp -Description "Helpdesk TI: pregunta de vez en cuando (en una ventanita, no en consola) si sigue siendo la misma persona la que usa este equipo." -Force | Out-Null
+    # Esta tarea es un extra (preguntar quien usa el equipo); si falla
+    # por lo que sea (version de Windows, idioma, permisos), NO debe
+    # frenar el resto de la instalacion -- lo importante es que el
+    # equipo quede registrado en el inventario si o si.
+    try {
+      Unregister-ScheduledTask -TaskName "HelpdeskTI-Responsable" -Confirm:$false -ErrorAction SilentlyContinue
+      $principalGrupo = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545"
+      $accionResp = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$preguntarPath`""
+      $disparadorResp = New-ScheduledTaskTrigger -AtLogOn
+      $configResp = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew
+      Register-ScheduledTask -TaskName "HelpdeskTI-Responsable" -Action $accionResp -Trigger $disparadorResp -Principal $principalGrupo -Settings $configResp -Description "Helpdesk TI: pregunta de vez en cuando (en una ventanita, no en consola) si sigue siendo la misma persona la que usa este equipo." -Force | Out-Null
+    } catch {
+      Log "No se pudo crear la tarea HelpdeskTI-Responsable (no es grave, el resto de la instalacion sigue): $($_.Exception.Message)"
+    }
 
     Actualizar-Estado "Enviando el primer reporte..." $colorTexto
     $procesoReporte = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$reportarPath`"" -WindowStyle Hidden -PassThru
