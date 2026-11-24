@@ -282,7 +282,7 @@ function Ejecutar-Instalacion($responsableTexto) {
 
     $temporizador = New-Object System.Windows.Forms.Timer
     $temporizador.Interval = 5000
-    $temporizador.Add_Tick({ $temporizador.Stop(); $form.Close() })
+    $temporizador.Add_Tick({ $temporizador.Stop(); $form.Close() }.GetNewClosure())
     $temporizador.Start()
   } catch {
     Log "ERROR durante la instalacion: $($_.Exception.Message)"
