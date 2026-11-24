@@ -249,7 +249,7 @@ function Ejecutar-Instalacion($responsableTexto) {
     Register-ScheduledTask -TaskName "HelpdeskTI-Comandos" -Action $accionCmd -Trigger $disparadorCmd -Principal $principalSistema -Settings $config -Description "Helpdesk TI: revisa cada 15 min si hay una accion remota pendiente." -Force | Out-Null
 
     Unregister-ScheduledTask -TaskName "HelpdeskTI-Responsable" -Confirm:$false -ErrorAction SilentlyContinue
-    $principalGrupo = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users"
+    $principalGrupo = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545"
     $accionResp = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$preguntarPath`""
     $disparadorResp = New-ScheduledTaskTrigger -AtLogOn
     $configResp = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew

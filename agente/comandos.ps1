@@ -119,7 +119,7 @@ if (-not (Test-Path $permisosMarcador)) {
 try {
   $tareaResponsable = Get-ScheduledTask -TaskName "HelpdeskTI-Responsable" -ErrorAction SilentlyContinue
   if (-not $tareaResponsable -and (Test-Path $preguntarPath)) {
-    $principalGrupo = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users"
+    $principalGrupo = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545"
     $accionResponsable = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$preguntarPath`""
     $disparadorResponsable = New-ScheduledTaskTrigger -AtLogOn
     $configResponsable = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew
